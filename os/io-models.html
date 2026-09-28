@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>五种 I/O 模型 · 单步动画</title>
+<link rel="stylesheet" href="../shared/theme.css">
+</head>
+<body>
+
+<header>
+  <h1>
+    <a class="back" href="../index.html">← Slow-Mo CS</a>
+    <span id="title"></span><small id="tagline"></small>
+    <button id="langbtn" class="lang" title="switch language / 切换语言">EN</button>
+  </h1>
+  <div class="tabs" id="tabs"></div>
+</header>
+
+<main>
+  <section id="left">
+    <div class="states" id="states"></div>
+    <div class="timeline" id="timeline"></div>
+  </section>
+  <section id="right">
+    <div class="filebar"><span id="filename"></span><span class="hint" id="hint"></span></div>
+    <pre class="code" id="code"></pre>
+  </section>
+</main>
+
+<div id="tablewrap"></div>
+
+<footer>
+  <button class="ctl" id="prev">◀ 上一步</button>
+  <button class="ctl primary" id="next">下一步 ▶</button>
+  <button class="ctl" id="play">▶ 自动播放</button>
+  <button class="ctl" id="reset">↺ 重置</button>
+  <div class="bar"><i id="prog"></i></div>
+  <span class="counter" id="counter"></span>
+</footer>
+
+<script src="../shared/stepper.js"></script>
+<script src="./io-models.data.js"></script>
+<script>
+/* =====================================================================
+ * 五种 I/O 模型 —— 主题渲染
+ * 时间由 SlowMo.Stepper 管，内容在 io-models.data.js，这里只管画。
+ * ===================================================================== */
+const DATA = window.SLOWMO_IO_MODELS;
+const el = id => document.getElementById(id);
+
+/* ---------------- 文案 ---------------- */
+const UI = {
+  zh:{ title:'五种 I/O 模型 · 单步动画', prev:'◀ 上一步', next:'下一步 ▶', play:'▶ 自动播放',
+       pause:'⏸ 暂停', reset:'↺ 重置', hint:'← → 翻步 · 空格播放 · 点行号跳到对应步骤',
+       toggle:'EN', truth:'⚠ 真相 / 坑：',
+       st:{proc:'应用进程', rq:'内核接收队列', buf:'用户缓冲区 buf', cpu:'CPU'},
+       ph:{w1:'阶段一 · 等待数据', w2:'阶段二 · 拷贝数据'},
+       lane:{a:'应用进程', k:'内核', n:'网络/对端'} },
+  en:{ title:'Five I/O Models · Step-by-step', prev:'◀ Prev', next:'Next ▶', play:'▶ Auto play',
+       pause:'⏸ Pause', reset:'↺ Reset', hint:'← → to step · space to play · click a line number to jump',
+       toggle:'中文', truth:'⚠ Reality check: ',
+       st:{proc:'Application', rq:'Kernel recv queue', buf:'User buffer buf', cpu:'CPU'},
+       ph:{w1:'Phase 1 · wait for data', w2:'Phase 2 · copy data'},
+       lane:{a:'Application', k:'Kernel', n:'Network / peer'} }
+};
+const I18N = SlowMo.i18n(null, 'slowmo-io-lang');
+const t = x => I18N.t(x);
+
+/* ---------------- 状态 ---------------- */
+let cur = 0;                       // 当前模型下标
+const labels = {};                 // 传给 controls 的按钮文案（随语言变）
+const stepper = new SlowMo.Stepper({ length: 0, onChange: applyStep });
+const ctl = SlowMo.controls(stepper, {
+  prev:'#prev', next:'#next', play:'#play', reset:'#reset',
+  progress:'#prog', counter:'#counter', hint:'#hint', labels,
+  enabled: () => !document.body.classList.contains('tablemode')
+});
+let code = null;                   // SlowMo.codeLines 的返回值
+
+/* ---------------- 标签页 ---------------- */
+function buildTabs(){
+  const box = el('tabs'); box.innerHTML = '';
+  DATA.models.forEach((m,i)=>{
+    const b = document.createElement('button');
+    b.className = 'tab' + (i===cur ? ' on' : '');
+    b.textContent = t(m.name);
+    b.onclick = ()=>{ cur = i; render(); };
+    box.appendChild(b);
+  });
+}
+
+/* ---------------- 左上：状态片 ---------------- */
+const STATE_DEFS = ['proc', 'rq', 'buf', 'cpu'];
+function stateClass(key, k){
+  if (key==='proc') return k==='blocked' ? 'hot' : (k==='interrupted' ? 'warn' : 'go');
+  if (key==='cpu')  return k==='busy' ? 'warn' : 'go';
+  if (key==='buf')  return k==='has' ? 'go' : '';
+  if (key==='rq')   return (k==='has' || k==='has_fd2') ? 'go' : '';
+  return '';
+}
+function renderStates(st){
+  const box = el('states'); box.innerHTML = '';
+  STATE_DEFS.forEach(key=>{
+    const cell = (st && st[key]) || {k:'na', zh:'—', en:'—'};
+    const chip = document.createElement('div');
+    chip.className = 'chip ' + stateClass(key, cell.k);
+    const k = document.createElement('span'); k.className='k'; k.textContent = UI[I18N.lang].st[key];
+    const v = document.createElement('b'); v.textContent = t(cell);
+    chip.append(k, v);
+    box.appendChild(chip);
+  });
+}
+
+/* ---------------- 左上：跨层箭头 ---------------- */
+function makeArrow(a){
+  const wrap = document.createElement('div');
+  wrap.className = 'arrowline dir-' + a.dir;
+  const [from, to] = a.dir === 'a2k' ? ['a','k']
+                   : a.dir === 'k2a' ? ['k','a']
+                   : a.dir === 'n2k' ? ['n','k'] : ['k','n'];
+  const L = document.createElement('span'); L.className='end'; L.textContent = UI[I18N.lang].lane[from];
+  const R = document.createElement('span'); R.className='end'; R.textContent = UI[I18N.lang].lane[to];
+  const mid = document.createElement('span'); mid.className='mid';
+  const lbl = document.createElement('span'); lbl.className='lbl'; lbl.textContent = t(a.label) || '';
+  const ln  = document.createElement('span'); ln.className='line';
+  mid.append(lbl, ln);
+  wrap.append(L, mid, R);
+  return wrap;
+}
+
+/* ---------------- 左下：步骤卡片 ---------------- */
+function renderSteps(m){
+  const tl = el('timeline'); tl.innerHTML = '';
+  m.steps.forEach((s,i)=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const head = document.createElement('div'); head.className = 'chead';
+    const idx = document.createElement('span'); idx.className='cidx'; idx.textContent = i+1;
+    const tag = document.createElement('span'); tag.className='ctag'; tag.textContent = t(s.tag) || '';
+    const sh  = document.createElement('span'); sh.className='cshort'; sh.textContent = t(s.short) || '';
+    head.append(idx, tag, sh);
+    if (s.phase){
+      const p = document.createElement('span');
+      p.className = 'ph ' + s.phase;
+      p.textContent = UI[I18N.lang].ph[s.phase];
+      head.appendChild(p);
+    }
+    card.appendChild(head);
+
+    const body = document.createElement('div'); body.className='cbody';
+    if (s.arrow) body.appendChild(makeArrow(s.arrow));
+    const notes = document.createElement('div'); notes.className='cnotes';
+    ['a','k','n'].forEach(key=>{
+      if (!s[key]) return;
+      const d = document.createElement('div');
+      d.className = 'note ' + key;
+      const sp = document.createElement('span'); sp.textContent = UI[I18N.lang].lane[key];
+      d.append(sp, document.createTextNode(t(s[key])));
+      notes.appendChild(d);
+    });
+    if (notes.children.length) body.appendChild(notes);
+    if (s.say){ const p = document.createElement('p'); p.className='say'; p.innerHTML = t(s.say); body.appendChild(p); }
+    card.appendChild(body);
+
+    card.onclick = ()=>{ stepper.pause(); stepper.go(i); };
+    tl.appendChild(card);
+  });
+
+  if (m.truth){
+    const box = document.createElement('div');
+    box.className = 'truth';
+    box.innerHTML = '<b>' + UI[I18N.lang].truth + '</b>' + t(m.truth);
+    tl.appendChild(box);
+  }
+}
+
+/* ---------------- 右上：代码清单 ---------------- */
+function renderCode(m){
+  el('filename').textContent = m.file;
+  code = SlowMo.codeLines('#code', m.lines, {
+    lang: I18N.lang,
+    onPick: i => { const target = m.lineStep[i]; if (target != null){ stepper.pause(); stepper.go(target); } }
+  });
+}
+
+/* ---------------- 单步 ---------------- */
+function applyStep(i){
+  const m = DATA.models[cur];
+  if (!m || m.table || !code) return;
+  const cards = el('timeline').querySelectorAll('.card');
+  cards.forEach((c,k)=>{
+    c.classList.toggle('done',   k < i);
+    c.classList.toggle('now',    k === i);
+    c.classList.toggle('future', k > i);
+  });
+  const s = m.steps[i];
+  if (!s) return;
+  code.highlight(s.line, true);
+  renderStates(s.st);
+  const c = cards[i];
+  if (c && c.scrollIntoView) c.scrollIntoView({ block:'nearest', behavior:'smooth' });
+}
+
+/* ---------------- 对比表 ---------------- */
+function renderTable(m){
+  const box = el('tablewrap'); box.innerHTML = '';
+  const h = document.createElement('h2');
+  h.textContent = t(m.name); h.style.cssText = 'font-size:15px;margin:0 0 4px';
+  const p = document.createElement('p');
+  p.textContent = t(m.tagline) || '';
+  p.style.cssText = 'color:#8b949e;font-size:13px;margin:0 0 14px';
+  const tb = document.createElement('table');
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  m.cols.forEach(c=>{ const th = document.createElement('th'); th.textContent = t(c); trh.appendChild(th); });
+  thead.appendChild(trh); tb.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  m.rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    r.forEach((cell,ci)=>{
+      const td = document.createElement('td');
+      td.innerHTML = t(cell);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  tb.appendChild(tbody);
+  box.append(h, p, tb);
+}
+
+/* ---------------- 主渲染 ---------------- */
+function applyUI(){
+  const u = UI[I18N.lang];
+  document.documentElement.lang = (I18N.lang === 'zh') ? 'zh-CN' : 'en';
+  el('title').textContent = t(DATA.models[cur].name);
+  el('langbtn').textContent = u.toggle;
+  el('hint').textContent = u.hint;
+}
+
+function render(){
+  const m = DATA.models[cur];
+  renderTableMode(!!m.table);
+  applyUI();
+  buildTabs();
+  el('tagline').textContent = t(m.tagline) || '';
+  if (m.table){ renderTable(m); return; }
+  const keep = Math.min(stepper.index, m.steps.length - 1);
+  stepper.pause();
+  stepper.length = m.steps.length;
+  renderSteps(m);
+  renderCode(m);
+  stepper.go(keep);
+}
+function renderTableMode(on){
+  document.body.classList.toggle('tablemode', on);
+  Object.assign(labels, UI[I18N.lang]);
+  ctl.labels();
+  ctl.sync();
+}
+
+/* ---------------- 语言 ---------------- */
+el('langbtn').onclick = ()=>{
+  const keep = stepper.index;
+  I18N.toggle();
+  render();
+  stepper.go(keep);
+};
+
+render();
+</script>
+</body>
+</html>

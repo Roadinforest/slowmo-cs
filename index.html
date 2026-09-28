@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slow-Mo CS · 慢放 CS</title>
+<link rel="stylesheet" href="./shared/theme.css">
+</head>
+<body>
+
+<div class="topbar"><button id="langbtn" class="lang" title="switch language / 切换语言">EN</button></div>
+
+<div class="gallery">
+  <div class="ghead">
+    <h1>Slow-Mo CS <small id="zhname"></small></h1>
+    <p class="lead" id="lead"></p>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <div class="grid" id="grid"></div>
+
+  <p class="gnote" id="gnote"></p>
+</div>
+
+<script src="./shared/stepper.js"></script>
+<script>
+/* =====================================================================
+ * 展厅大厅：列出所有主题，按领域筛选。
+ * 加一个新主题 = 在 TOPICS 里加一条 + 写一个 topics/xxx.html
+ * ===================================================================== */
+
+const UI = {
+  zh:{
+    title:'Slow-Mo CS · 慢放 CS',
+    short:'慢放',
+    lead:'把课本上一笔带过的那几步放慢。红黑树为什么会旋转、线程切换到底换掉了什么、数据在哪一步被拷贝——<b>自己按下一步</b>，能回退、能改参数、能停在任意一帧。',
+    all:'全部', live:'可以玩', planned:'计划中',
+    areas:{ ds:'数据结构', os:'操作系统', arch:'组成原理', compiler:'编译原理', net:'网络' },
+    note:'每个主题都是纯 HTML/CSS/JS，克隆下来打开 index.html 即可，没有构建、没有依赖、可离线。',
+    steps:'步'
+  },
+  en:{
+    title:'Slow-Mo CS',
+    short:'computer science in slow motion',
+    lead:'The steps textbooks skip, slowed down. Why a red-black tree rotates, what a context switch actually swaps out, at which frame the data gets copied — <b>drive it yourself</b>: step back, change the input, stop on any frame.',
+    all:'All', live:'playable', planned:'planned',
+    areas:{ ds:'Data structures', os:'Operating systems', arch:'Architecture', compiler:'Compilers', net:'Networking' },
+    note:'Every topic is plain HTML/CSS/JS — clone the repo and open index.html. No build, no dependencies, works offline.',
+    steps:'steps'
+  }
+};
+
+const TOPICS = [
+  { area:'os', ready:true, href:'os/io-models.html', steps:50,
+    name:{ zh:'五种 I/O 模型', en:'Five I/O Models' },
+    desc:{ zh:'阻塞、非阻塞、多路复用、信号驱动、异步。同一个 socket，五种命运：进程在哪一步被挂起，数据在哪一步被拷进用户缓冲区。',
+           en:'Blocking, non-blocking, multiplexing, signal-driven, async. One socket, five fates: where the process blocks, when the copy lands in the user buffer.' } },
+
+  { area:'ds', name:{ zh:'二叉搜索树', en:'Binary Search Tree' },
+    desc:{ zh:'插入、查找、删除，看结构随每一步重新长出来。', en:'Insert, search, delete — watch the shape grow step by step.' } },
+  { area:'ds', name:{ zh:'红黑树旋转', en:'Red-Black Tree Rotations' },
+    desc:{ zh:'为什么非要旋转？每一步变色和旋转都停给你看，和 AVL 对照。', en:'Why rotate at all? Every recolor and rotation, paused, side by side with AVL.' } },
+  { area:'ds', name:{ zh:'堆与优先队列', en:'Heaps' },
+    desc:{ zh:'上浮与下沉的每一层交换，画成树和数组两份视图。', en:'Sift-up and sift-down, shown as both a tree and an array.' } },
+  { area:'ds', name:{ zh:'哈希表冲突', en:'Hash Table Collisions' },
+    desc:{ zh:'拉链法、开放寻址、再哈希，看着负载因子把表撑爆。', en:'Chaining, open addressing, rehashing — watch the load factor blow the table up.' } },
+
+  { area:'os', name:{ zh:'线程与上下文切换', en:'Threads & Context Switch' },
+    desc:{ zh:'寄存器、栈指针、PCB 逐个换过去，顺便看看它到底有多贵。', en:'Registers, stack pointer, PCB swapped out one by one — and what it costs.' } },
+  { area:'os', name:{ zh:'CPU 调度', en:'CPU Scheduling' },
+    desc:{ zh:'改时间片和优先级，甘特图跟着重画，FCFS / SJF / RR / 多级反馈。', en:'Change the quantum and priorities; the Gantt chart redraws: FCFS, SJF, RR, MLFQ.' } },
+  { area:'os', name:{ zh:'页面置换', en:'Page Replacement' },
+    desc:{ zh:'给你自己的引用串，跑 FIFO / LRU / Clock，数缺页中断。', en:'Feed in your own reference string; run FIFO, LRU, Clock and count the faults.' } },
+  { area:'os', name:{ zh:'死锁与银行家算法', en:'Deadlock & Banker’s Algorithm' },
+    desc:{ zh:'拖动资源分配图，看环路什么时候出现，安全序列怎么找。', en:'Drag the allocation graph, spot the cycle, find a safe sequence.' } },
+
+  { area:'arch', name:{ zh:'缓存与局部性', en:'Cache & Locality' },
+    desc:{ zh:'一次遍历，看命中率随步长、容量、相联度怎么变。', en:'One loop: watch the hit rate move with stride, size and associativity.' } },
+  { area:'arch', name:{ zh:'流水线冒险', en:'Pipeline Hazards' },
+    desc:{ zh:'逐周期推进，看一条 load 怎么把后面的指令全卡住，以及转发救回几拍。', en:'Cycle by cycle: how one load stalls everything behind it, and what forwarding saves.' } },
+
+  { area:'compiler', name:{ zh:'词法与语法分析', en:'Lexer & Parser' },
+    desc:{ zh:'一句话进去，token 流和一个语法树逐步长出来。', en:'A sentence goes in; a token stream and a parse tree grow out.' } },
+
+  { area:'net', name:{ zh:'TCP 握手与拥塞控制', en:'TCP Handshake & Congestion Control' },
+    desc:{ zh:'三次握手、四次挥手，加一个能拖的拥塞窗口曲线。', en:'The three-way handshake, the four-way close, and a congestion window you can drag.' } }
+];
+
+const I18N = SlowMo.i18n(null, 'slowmo-lang');
+const t = x => I18N.t(x);
+const el = id => document.getElementById(id);
+let filter = 'all';
+
+function applyUI(){
+  const u = UI[I18N.lang];
+  document.documentElement.lang = (I18N.lang === 'zh') ? 'zh-CN' : 'en';
+  document.title = u.title;
+  el('langbtn').textContent = (I18N.lang === 'zh') ? 'EN' : '中文';
+  el('zhname').textContent = u.short;
+  el('lead').innerHTML = u.lead;
+  el('gnote').textContent = u.note;
+}
+
+function renderFilters(){
+  const u = UI[I18N.lang];
+  const box = el('filters'); box.innerHTML = '';
+  const areas = ['all'].concat(TOPICS.map(x => x.area).filter((v,i,a) => a.indexOf(v) === i));
+  areas.forEach(a => {
+    const b = document.createElement('button');
+    b.className = 'filter' + (a === filter ? ' on' : '');
+    b.textContent = (a === 'all') ? u.all : u.areas[a];
+    b.onclick = () => { filter = a; render(); };
+    box.appendChild(b);
+  });
+}
+
+function renderGrid(){
+  const u = UI[I18N.lang];
+  const box = el('grid'); box.innerHTML = '';
+  TOPICS.filter(x => filter === 'all' || x.area === filter).forEach(x => {
+    const node = document.createElement(x.ready ? 'a' : 'div');
+    node.className = 'tile ' + (x.ready ? 'ready' : 'planned');
+    node.dataset.area = x.area;
+    if (x.ready) node.href = x.href;
+
+    const area = document.createElement('span');
+    area.className = 'area';
+    area.textContent = u.areas[x.area];
+
+    const tt = document.createElement('div');
+    tt.className = 'tt';
+    tt.textContent = t(x.name);
+
+    const td = document.createElement('div');
+    td.className = 'td';
+    td.textContent = t(x.desc);
+
+    const meta = document.createElement('div');
+    meta.className = 'tmeta';
+    const pill = document.createElement('span');
+    pill.className = 'pill' + (x.ready ? ' live' : '');
+    pill.textContent = x.ready ? u.live : u.planned;
+    meta.appendChild(pill);
+    if (x.steps){
+      const s = document.createElement('span');
+      s.textContent = x.steps + ' ' + u.steps;
+      meta.appendChild(s);
+    }
+
+    node.append(area, tt, td, meta);
+    box.appendChild(node);
+  });
+}
+
+function render(){ applyUI(); renderFilters(); renderGrid(); }
+
+el('langbtn').onclick = () => { I18N.toggle(); render(); };
+render();
+</script>
+</body>
+</html>
