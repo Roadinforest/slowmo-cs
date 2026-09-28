@@ -56,8 +56,9 @@ const TOPICS = [
     desc:{ zh:'阻塞、非阻塞、多路复用、信号驱动、异步。同一个 socket，五种命运：进程在哪一步被挂起，数据在哪一步被拷进用户缓冲区。',
            en:'Blocking, non-blocking, multiplexing, signal-driven, async. One socket, five fates: where the process blocks, when the copy lands in the user buffer.' } },
 
-  { area:'ds', name:{ zh:'二叉搜索树', en:'Binary Search Tree' },
-    desc:{ zh:'插入、查找、删除，看结构随每一步重新长出来。', en:'Insert, search, delete — watch the shape grow step by step.' } },
+  { area:'ds', ready:true, href:'ds/trees.html', steps:127,
+    name:{ zh:'常见树结构', en:'Common Tree Structures' },
+    desc:{ zh:'多叉树、二叉树、BST、AVL、红黑树、堆、B 树、B+ 树：逐步看结构、复杂度与原因。', en:'N-ary trees, binary trees, BSTs, AVL, red-black, heaps, B-trees, and B+ trees — structure, complexity, and why.' } },
   { area:'ds', name:{ zh:'红黑树旋转', en:'Red-Black Tree Rotations' },
     desc:{ zh:'为什么非要旋转？每一步变色和旋转都停给你看，和 AVL 对照。', en:'Why rotate at all? Every recolor and rotation, paused, side by side with AVL.' } },
   { area:'ds', name:{ zh:'堆与优先队列', en:'Heaps' },

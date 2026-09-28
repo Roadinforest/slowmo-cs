@@ -33,7 +33,7 @@ Open **`index.html`**. That is the whole setup.
 | Area | Topic | Status |
 | --- | --- | --- |
 | OS | [Five I/O Models](os/io-models.html) — blocking, non-blocking, multiplexing, signal-driven, async | ✅ playable |
-| Data structures | Binary search tree | planned |
+| Data structures | [Common tree structures](ds/trees.html) — N-ary, binary, BST, AVL, red-black, heap, B-tree, B+ tree | ✅ playable |
 | Data structures | Red-black tree rotations (next to AVL) | planned |
 | Data structures | Heaps — sift-up / sift-down | planned |
 | Data structures | Hash table collisions, load factor, rehashing | planned |
