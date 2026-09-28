@@ -167,7 +167,11 @@ tbody tr:hover td{background:#1a2028}
 /* ============ 展厅首页 ============ */
 .topbar{display:flex;align-items:center;justify-content:flex-end;padding:16px 32px 0}
 .ghead h1 small{font-size:13px;color:var(--dim);font-weight:400;margin-left:10px}
-.gallery{flex:1;overflow:auto;padding:28px 32px 60px;max-width:1180px;width:100%;margin:0 auto}
+.gallery{flex:1;min-height:0;overflow:auto;padding:26px 32px 48px;max-width:1180px;width:100%;
+  margin:0 auto;
+  /* 展厅不要滚动条：滚轮 / 触摸 / 键盘照常滚，只是不画那根杠 */
+  scrollbar-width:none;-ms-overflow-style:none}
+.gallery::-webkit-scrollbar{display:none}
 .ghead{margin-bottom:26px}
 .ghead h1{font-size:30px;font-weight:700;letter-spacing:-.4px;margin:0 0 6px;display:block}
 .ghead .lead{color:var(--dim);font-size:14.5px;max-width:62ch;margin:0 0 4px}
