@@ -31,7 +31,11 @@
     allowTransient: false,
     /* 红黑性质：根为黑、无红红相连、每条根到空叶路径黑高相同。
      * 需要节点带 color 字段（'red' / 'black'）。 */
-    redBlack: false
+    redBlack: false,
+    /* 多路树（B 树 / B+ 树）的分裂天生是"一步出现两个节点"：被劈的节点留住左半边，
+     * 同时冒出一个右半边（根分裂时还多一个新根）。这不是失控的批量改动，
+     * 而是这个结构的本来样子 —— 打开它表示"允许多节点差异"，其余规则照旧。 */
+    multiChildDiff: false
   };
 
   /* 返回 { problems: [{what, detail}], info: {roots, maxDepth, size} } */
@@ -171,12 +175,12 @@
     const reparented = [...b.keys()].filter(k => a.has(k) && a.get(k).parent !== b.get(k).parent);
     const rekeyed = [...b.keys()].filter(k => a.has(k) && a.get(k).key !== b.get(k).key);
     const problems = [];
-    if (added.length > 1) problems.push({ what: '一步新增了多个节点', detail: added.join(',') });
+    if (added.length > 1 && !P.multiChildDiff) problems.push({ what: '一步新增了多个节点', detail: added.join(',') });
     /* bulkDelete：这一页的删除语义就是"整棵子树摘掉"（文件系统删目录），
      * 所以一步少掉多个节点是意料之中，不是失控。 */
-    if (removed.length > 1 && !P.bulkDelete) problems.push({ what: '一步删除了多个节点', detail: removed.join(',') });
+    if (removed.length > 1 && !P.bulkDelete && !P.multiChildDiff) problems.push({ what: '一步删除了多个节点', detail: removed.join(',') });
     const changes = added.length + removed.length + reparented.length + rekeyed.length;
-    if (changes > P.maxChanges && !P.bulkDelete) {
+    if (changes > P.maxChanges && !P.bulkDelete && !P.multiChildDiff) {
       problems.push({ what: '一步内结构变化过多', detail: `+${added.length} -${removed.length} 换父${reparented.length} 换键${rekeyed.length}` });
     }
     return { problems, added, removed, reparented, rekeyed, changes };

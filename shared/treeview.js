@@ -87,7 +87,7 @@
   }
 
   function nodeWidth(n, M) {
-    const main = textWidth(n.label != null ? n.label : n.key, M.LABEL) + M.NODE_H * 0.5;
+    const main = textWidth(n.label != null ? n.label : (n.key != null ? n.key : ''), M.LABEL) + M.NODE_H * 0.5;
     const sub = n.sub ? textWidth(n.sub, M.SUB) + M.NODE_H * 0.4 : 0;
     return Math.max(M.MIN_W, Math.min(M.MAX_W, Math.max(main, sub)));
   }

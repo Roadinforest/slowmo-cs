@@ -36,6 +36,18 @@ export const PAGES = [
     css: '  /* 颜色就是数据：节点比别的页宽一点 */\n  .wrap{grid-template-columns:minmax(460px,1.25fr) minmax(360px,1fr)}'
   },
   {
+    id: 'btree',
+    title: 'B 树 · 单步理解',
+    scripts: ['./btree.js', './btree.page.js'],
+    css: '  /* 一个节点里要横排多个键，节点比二叉的宽 */\n  .wrap{grid-template-columns:minmax(500px,1.35fr) minmax(360px,1fr)}'
+  },
+  {
+    id: 'bplus',
+    title: 'B+ 树 · 单步理解',
+    scripts: ['./btree.js', './bplus.page.js'],
+    css: '  /* 一个节点里要横排多个键，节点比二叉的宽 */\n  .wrap{grid-template-columns:minmax(500px,1.35fr) minmax(360px,1fr)}'
+  },
+  {
     id: 'general',
     title: '普通树 / 多叉树 · 单步理解',
     scripts: ['./general.js', './general.page.js'],

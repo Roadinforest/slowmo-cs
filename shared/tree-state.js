@@ -57,9 +57,11 @@
 
       const extra = o.badges ? o.badges(n, kids, step) : {};
       return Object.assign({
-        key: n.id,
+        key: n.id,                                  /* 视图按 id 复用 DOM */
         parent: n.parent,
-        label: String(n.key),
+        /* 显示文本：多键节点（B 树 / B+ 树）自己在快照里给了 label，
+         * 单键节点就用 key。少了这一层，多键节点会被画成 undefined。 */
+        label: n.label != null ? String(n.label) : String(n.key),
         state: cls.join(' ')
       }, extra);
     });

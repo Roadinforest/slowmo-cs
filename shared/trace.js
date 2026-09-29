@@ -107,7 +107,11 @@
      * key 会在删除时被后继顶替，那一刻树里会短暂出现两个相同 key。 */
     snapshotNode(n, parentId, out) {
       const extra = this.extras ? this.extras(n) : null;
-      out.push(Object.assign({ id: this.idx(n), key: n.key, parent: parentId, height: n.height }, extra));
+      /* label 是可选的展示文本：单键节点用 key，多键节点（B 树）用逗号拼起来。
+       * 视图优先用它，避免多键节点被画成 undefined。 */
+      const base = { id: this.idx(n), key: n.key, parent: parentId, height: n.height };
+      if (n.label != null) base.label = n.label;
+      out.push(Object.assign(base, extra));
       for (const c of this.kids(n) || []) if (c) this.snapshotNode(c, this.idx(n), out);
     }
     snapshot() {

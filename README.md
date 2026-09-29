@@ -62,7 +62,8 @@ slowmo-cs/
 │   ├── bst.html / bst.js       # every key you type runs the real algorithm
 │   ├── general.html / general.js  # n-ary file tree, text keys
 │   ├── binary.html / binary.js # level-order array reading
-│   ├── btree.html / btree.js   # B-tree and B+ tree, split/borrow/merge
+│   ├── btree.html / btree.js   # B-tree: split/borrow/merge, keys in internal nodes
+│   ├── bplus.html / btree.js   # B+ tree: separators only, records in linked leaves
 │   ├── trees.html              # the older, hand-drawn tree tour
 │   └── trees.data.js
 ├── shared/
@@ -103,7 +104,8 @@ B+ leaf-chain cells that never entered the layout at all, and two nodes landing
 on the same pixel in four diagrams.
 
 **Algorithm-driven, and directly operable** (`ds/bst.html`, `ds/avl.html`,
-`ds/rbt.html`, `ds/heap.html`, `ds/general.html`, `ds/binary.html`) — you write the
+`ds/rbt.html`, `ds/heap.html`, `ds/general.html`, `ds/binary.html`,
+`ds/btree.html`, `ds/bplus.html`) — you write the
 algorithm as a subclass of `Trace` (`shared/trace.js`), it records its own run, and
 the page is just a `main`:
 
@@ -149,6 +151,15 @@ fails if a generated page has drifted from the template or its config, and
 topic against a `Set` model, checking every frame's structural invariants and the
 resulting key set — that is what makes "the user can type anything" a claim with
 machine backing instead of a hope.
+
+Two structural facts are expressed as explicit policies in `tools/topics.mjs`
+rather than papered over: a multi-way insert genuinely produces two nodes in one
+step (a split leaves the left half in place and creates a right half, plus a new
+root when the root splits), so `multiChildDiff` allows that; and a B+ tree's
+internal keys are copies of leaf keys by design, so `separatorsMayRepeat` turns off
+the "keys must be unique" rule for that page only. Everything else — one root, no
+cycles, children in order, leaves on one level, one step may not delete a whole
+subtree — stays enforced.
 
 ## Adding a topic
 

@@ -78,6 +78,12 @@ const TOPICS = [
   { area:'ds', ready:true, href:'ds/bst.html', steps:30,
     name:{ zh:'二叉搜索树（BST）', en:'Binary Search Tree' },
     desc:{ zh:'左小右大，自己输入键就能增删查；退化成一条链的样子也演给你看。', en:'Smaller left, larger right: type your own keys to insert, search and delete, including the degenerate chain.' } },
+  { area:'ds', ready:true, href:'ds/btree.html', steps:18,
+    name:{ zh:'B 树', en:'B-tree' },
+    desc:{ zh:'一个节点装多个键：插入时满节点劈成两半、中间键升上去，删除先借后合。层数矮，磁盘读得少。', en:'Many keys per node: a full node splits with its middle key moving up, and a delete borrows before it merges. A shallow tree means few disk reads.' } },
+  { area:'ds', ready:true, href:'ds/bplus.html', steps:20,
+    name:{ zh:'B+ 树', en:'B+ tree' },
+    desc:{ zh:'内部节点只存分隔键，记录全在叶子、叶子连成一条链；叶子分裂时中间键是复制上去的。', en:'Internal nodes hold separators only, records live in linked leaves, and a leaf split copies its middle key up instead of moving it.' } },
   { area:'ds', name:{ zh:'哈希表冲突', en:'Hash Table Collisions' },
     desc:{ zh:'拉链法、开放寻址、再哈希，看着负载因子把表撑爆。', en:'Chaining, open addressing, rehashing — watch the load factor blow the table up.' } },
 

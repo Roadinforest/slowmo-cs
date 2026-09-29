@@ -46,9 +46,17 @@
     root() { if (this.plus) this._relink(); return this._root; }
     kids(n) { return n.children; }
     /* 节点显示：B+ 树的内部节点标成"分隔键"，叶子标成记录 */
-    extras(n) { return { keys: n.keys.slice(), kind: this.plus && !n.leaf ? 'sep' : 'rec' }; }
+    extras(n) { return { keys: n.keys.slice(), label: n.keys.join(' | '), kind: this.plus && !n.leaf ? 'sep' : 'rec' }; }
     static resetIds() { nextId = 1; }
-    resetIds() { nextId = 1; }
+    /* 会话层在"造好空树、还没撒种子"的时候会调这个（见 shared/tree-session.js）。
+     * 构造函数已经给根发过号了，这里如果只把计数器拨回 1，紧接着新建的节点就会
+     * 和根撞号 —— frames.js 的"id 唯一"当场失败，视图按 id 复用 DOM 也会错位。
+     * 所以这里把树里已有的节点重新编号，计数器接在最后一个后面。 */
+    resetIds() {
+      let n = 0;
+      (function walk(x) { x.id = ++n; x.children.forEach(walk); })(this._root);
+      nextId = n + 1;
+    }
 
     get rootNode() { return this._root; }
     set rootNode(v) { this._root = v; }
@@ -154,17 +162,17 @@
                 `先走到目标叶子`, `walk down to the target leaf`);
       let node = root;
       if (node.keys.length >= this.MAX) {
-        this._log(`根已经满了（${node.keys.length} 个键）：先劈开根，树长高一层`,
-                  `The root is full (${node.keys.length} keys): split the root first and the tree grows`, node.id,
-                  `先劈根`, `split the root first`);
-        const sp = this._split(node, 0);
+        /* 劈根分两步（先分两半、再建新根），中间那一瞬间右半边还没挂回去。
+         * 所以劈的时候先别留痕，等新根挂好再一次性记一帧 —— 否则读者会看到
+         * "一步删掉 8 个节点、又一步加回来 10 个"这种假动作。 */
+        const sp = this._split(node, 0, true);
         const fresh = new BNode(false);
         fresh.keys = [sp.midKey];
         fresh.children = [sp.left, sp.right];
         this._root = fresh;
         node = fresh;
-        this._log(`${sp.midKey} 成为新的根，树长高一层（现在 ${this._height(fresh)} 层）`,
-                  `${sp.midKey} becomes the new root and the tree grows one level (now ${this._height(fresh)} levels)`,
+        this._log(`根满了，劈成 [${label(sp.left)}] 和 [${label(sp.right)}]：${sp.midKey} 升上来当新的根，树长高一层（现在 ${this._height(fresh)} 层）`,
+                  `The root was full, so it splits into [${label(sp.left)}] and [${label(sp.right)}]: ${sp.midKey} rises to become the new root and the tree grows one level (now ${this._height(fresh)} levels)`,
                   fresh.id, `根分裂，树长高`, `the root splits, the tree grows`);
       }
       const res = this._insertNonFull(node, key, 0);
@@ -199,21 +207,20 @@
         this._log(`插到叶子的第 ${pos + 1} 个位置：这个叶子现在是 [${label(n)}]`,
                   `Insert at position ${pos + 1} of the leaf: it now reads [${label(n)}]`, n.id,
                   `叶子插入完成`, `inserted into the leaf`);
-        return n.keys.length > this.MAX ? this._split(n, depth) : null;
+        /* 满了先别留痕：此刻右半边还没挂回父节点，拍下来就是"凭空少了几个节点"。
+         * 交给调用者在挂好之后一次性记一帧。 */
+        return n.keys.length > this.MAX ? this._split(n, depth, true) : null;
       }
       let i = 0;
       while (i < n.keys.length && key > n.keys[i]) i++;
       const child = n.children[i];
       if (child.keys.length >= this.MAX) {
-        this._log(`第 ${i + 1} 个孩子已经满了（${child.keys.length} 个键）：先劈开它再往下`,
-                  `Child ${i + 1} is full (${child.keys.length} keys): split it before descending`, child.id,
-                  `下降前先劈开满孩子`, `split the full child before descending`);
-        const sp = this._split(child, depth + 1);
+        const sp = this._split(child, depth + 1, true);
         n.keys.splice(i, 0, sp.midKey);
         n.children.splice(i + 1, 0, sp.right);
-        this._log(`${sp.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
-                  `${sp.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
-                  `中间键提上来`, `the middle key moves up`);
+        this._log(`第 ${i + 1} 个孩子满了，先劈成 [${label(sp.left)}] 和 [${label(sp.right)}]；${sp.midKey} 提上来插到第 ${i + 1} 个位置，这个节点现在是 [${label(n)}]`,
+                  `Child ${i + 1} was full, so it splits into [${label(sp.left)}] and [${label(sp.right)}]; ${sp.midKey} is promoted into position ${i + 1} and the node now reads [${label(n)}]`,
+                  n.id, `先劈满孩子，中间键提上来`, `split the full child and promote its middle key`);
         if (key > sp.midKey) i++;
       }
       const sub = this._insertNonFull(n.children[i], key, depth + 1);
@@ -224,22 +231,22 @@
       }
       n.keys.splice(i, 0, sub.midKey);
       n.children.splice(i + 1, 0, sub.right);
-      this._log(`${sub.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
-                `${sub.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
-                `中间键提上来`, `the middle key moves up`);
+      this._log(`孩子劈成 [${label(sub.left)}] 和 [${label(sub.right)}]，${sub.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
+                `The child split into [${label(sub.left)}] and [${label(sub.right)}]; ${sub.midKey} is promoted into position ${i + 1} and the node now reads [${label(n)}]`,
+                n.id, `中间键提上来`, `the middle key moves up`);
       return n.keys.length > this.MAX ? this._split(n, depth) : null;
     }
 
     /* 分裂：B 树把中间键上移；B+ 树的叶子是"复制"上去，分隔键留在叶子里。
      * 分裂点取 floor((n-1)/2)：n 个键时左边 floor((n-1)/2) 个、右边 n-1-左边 个，
      * 两半都不超过上限。写成 floor(n/2) 的话 4 个键会切成"1 + 3"，右半边又是满的。 */
-    _split(n, depth) {
+    _split(n, depth, quiet) {
       const mid = Math.floor((n.keys.length - 1) / 2);
       if (this.plus && n.leaf) {
         const right = new BNode(true);
         right.keys = n.keys.slice(mid);
         n.keys = n.keys.slice(0, mid);
-        this._log(`叶子分裂成 [${label(n)}] 和 [${label(right)}]；${right.keys[0]} 复制一份上去当分隔键（叶子里仍然留着它）`,
+        if (!quiet) this._log(`叶子分裂成 [${label(n)}] 和 [${label(right)}]；${right.keys[0]} 复制一份上去当分隔键（叶子里仍然留着它）`,
                   `The leaf splits into [${label(n)}] and [${label(right)}]; ${right.keys[0]} is copied up as a separator (it stays in the leaf)`,
                   n.id, `叶子分裂，分隔键复制上去`, `leaf split, the separator is copied up`);
         return { split: true, midKey: right.keys[0], right, left: n };
@@ -250,16 +257,24 @@
       right.children = n.children.slice(mid + 1);
       n.keys = n.keys.slice(0, mid);
       n.children = n.children.slice(0, mid + 1);
-      this._log(`分裂成 [${label(n)}] 和 [${label(right)}]，中间键 ${midKey} ${this.plus ? '复制' : '上移'}到父节点`,
+      if (!quiet) this._log(`分裂成 [${label(n)}] 和 [${label(right)}]，中间键 ${midKey} ${this.plus ? '复制' : '上移'}到父节点`,
                 `Split into [${label(n)}] and [${label(right)}]; the middle key ${midKey} ${this.plus ? 'is copied' : 'moves'} up`,
                 n.id, `中间键 ${midKey} ${this.plus ? '复制' : '上移'}`, `${midKey} goes up`);
       return { split: true, midKey, right, left: n };
     }
 
     /* ------------------------------------------------------------------ 删除
-     * 下降之前先把目标孩子"补够"（保证删完还剩 MIN 个），所以进门时不会欠账；
-     * 一路走到叶子，摘掉键；如果这个叶子因此低于下限，再自底向上修（借 / 合）。
-     * B+ 树的记录只在叶子里，内部节点只做导航 —— 所以不存在"顶替内部键"这一步。 */
+     * 删除比插入多两件麻烦事：
+     *   1. 摘掉一个键可能让节点低于下限，所以下降之前先"补够"：目标孩子只有
+     *      MIN 个键时，先向有富余的兄弟借一个（父子之间转一下），借不到就把它
+     *      和兄弟连同分隔键合并。这样一路走到叶子，摘完键也不会欠账；合并会把
+     *      父节点掏空，于是空了的根退位，树矮一层。
+     *   2. B+ 树内部节点的键只是分隔符，含义是"右子树的最小键"。删掉叶子里最小
+     *      的那个键之后，往上每一层的分隔键都要重新对齐 —— 这是 B+ 树删除最容易
+     *      漏的一步（树看着还连通，查找和范围扫描却会走错路）。
+     * B 树的键可以住在内部节点上：用左子树的最大键（前驱）或右子树的最小键
+     * （后继）顶替，再下到子树里把前驱/后继删掉；两边都只有 MIN 个键时，把键
+     * 拉下来和两个半边一起合并。 */
     remove(root, key) {
       this._refused = null;
       this._relinkIfPlus();
@@ -267,25 +282,28 @@
         this._log(`${key} 不在这棵树里`, `${key} is not in this tree`, null, `不在这里`, `not in this tree`);
         return root;
       }
-      this._log(`确认 ${key} 在树里，开始删除（路上先补够，不够就借、借不到就合）`,
-                `${key} is in the tree; start deleting (top up on the way down; borrow, else merge)`, root.id,
+      this._log(`确认 ${key} 在树里，开始删除：下降前先补够，不够就借、借不到就合`,
+                `${key} is in the tree; start deleting: top up on the way down, borrow or merge when short`, root.id,
                 `开始删除`, `start the delete`);
       this._audit('删除前 ' + key);
-      const res = this._remove(root, key);
-      if (res && res.underflow && root.keys.length === 0 && !root.leaf && root.children.length === 1) {
-        this._root = root.children[0];
+      this._remove(root, key);
+      const r = this._root;
+      if (!r.leaf && r.keys.length === 0) {
+        /* 根是唯一允许"空"的节点：空了就把唯一的孩子提上来，树矮一层 */
+        this._root = r.children[0];
         this._log(`根空了：它唯一的孩子成为新根，树矮一层`,
                   `The root ran empty: its only child becomes the new root and the tree shrinks`, this._root.id,
                   `根空了，树矮一层`, `the root is empty, the tree shrinks`);
-      } else if (this._root.keys.length === 0 && this._root.leaf) {
-        this._log(`树空了`, `The tree is now empty`, this._root.id, `删空了`, `now empty`);
+      } else if (r.leaf && r.keys.length === 0) {
+        this._log(`树空了`, `The tree is now empty`, r.id, `删空了`, `now empty`);
       }
       this._relinkIfPlus();
       this._audit('删除后 ' + key);
       return this._root;
     }
 
-    /* 返回 {underflow:true} 表示这一层的孩子删完不够了，需要调用者收拾 */
+    /* 把 key 从 n 这棵子树里摘掉。返回 {underflow:true} 表示这棵子树删完不够了，
+     * 需要调用者收拾 —— 下降前先补够的话，只有根会遇到。 */
     _remove(n, key) {
       if (n.leaf) {
         const at = n.keys.indexOf(key);
@@ -296,121 +314,190 @@
                   `叶子摘掉 ${key}`, `removed ${key} from the leaf`);
         return { underflow: n.keys.length < this.MIN };
       }
-      let i = 0;
-      while (i < n.keys.length && key > n.keys[i]) i++;
-      if (!this.plus && i < n.keys.length && key === n.keys[i]) {
-        /* B 树：键在内部节点上 —— 用前驱顶替，再到左子树里把前驱删掉 */
-        const pred = this._maxKey(n.children[i]);
-        this._log(`${key} 在内部节点里：用它左子树的最大键 ${pred} 顶替（前驱）`,
-                  `${key} sits in an internal node: replace it with the predecessor ${pred}, the maximum of its left subtree`,
-                  n.id, `内部节点：前驱顶替`, `internal node: take the predecessor`);
-        this._topUp(n, i);
-        const at = n.keys.indexOf(key);
-        const target = at >= 0 ? at : i;
-        const sub = this._remove(n.children[target], pred);
-        if (n.keys[target] === key) n.keys[target] = pred;
-        if (sub && sub.underflow) this._fixChild(n, target);
-        return { underflow: n.keys.length < this.MIN && n.parent !== null };
-      }
-      this._topUp(n, i);
-      /* 借位/合并会改动这一层的键，所以下标要重新算 */
-      let j = 0;
-      while (j < n.keys.length && key > n.keys[j]) j++;
-      if (!this.plus && j < n.keys.length && key === n.keys[j]) {
-        /* 补完之后键可能被挪到了分隔键上，重新走一次内部节点分支 */
-        return this._remove(n, key);
-      }
-      const sub = this._remove(n.children[j], key);
-      if (sub && sub.underflow) this._fixChild(n, j);
+      let i = this._childIndex(n, key);
+      /* B 树：键就住在内部节点上 */
+      if (!this.plus && i < n.keys.length && n.keys[i] === key) return this._removeOwnKey(n, key, i);
+      i = this._topUp(n, i);
+      const sub = this._remove(n.children[i], key);
+      if (sub && sub.underflow) i = this._fixChild(n, i);
+      /* B+ 树：孩子的最小键可能变了，往上修正这一层的分隔键 */
+      if (this.plus) this._refreshSeparator(n, i);
       return { underflow: n.keys.length < this.MIN };
     }
 
-    /* 下降之前保证第 i 个孩子"删掉一个键之后仍然够" */
+    /* key 该落在这个节点的第几个孩子里。
+     * B 树：相等的键说明"键就在这个节点上"，下标停在它左边的孩子；
+     * B+ 树：分隔键等于右子树的最小键，相等就要往右走 —— 记录在右边那半边。 */
+    _childIndex(n, key) {
+      let i = 0;
+      if (this.plus) { while (i < n.keys.length && key >= n.keys[i]) i++; }
+      else { while (i < n.keys.length && key > n.keys[i]) i++; }
+      return i;
+    }
+
+    /* B 树专有：要删的键正住在内部节点上 —— 前驱/后继顶替，或者把键拉下来合并。 */
+    _removeOwnKey(n, key, i) {
+      const left = n.children[i], right = n.children[i + 1];
+      if (left.keys.length > this.MIN) {
+        const pred = this._maxKey(left);
+        this._log(`${key} 住在内部节点里：用左子树的最大键 ${pred} 顶替（前驱），再到那个子树里把 ${pred} 删掉`,
+                  `${key} lives in an internal node: replace it with the predecessor ${pred}, the maximum of the left subtree, then delete ${pred} down there`,
+                  n.id, `内部节点上的键：前驱顶替`, `internal key: take the predecessor`);
+        const sub = this._remove(left, pred);
+        const was = n.keys[i];
+        n.keys[i] = pred;                 // 先改结构再留痕：画面和旁白必须是同一时刻的状态
+        this._log(`前驱 ${pred} 接替 ${was} 的键位：这个节点现在是 [${label(n)}]`,
+                  `The predecessor ${pred} takes over the slot of ${was}: the node now reads [${label(n)}]`, n.id,
+                  `前驱补位完成`, `the predecessor is in place`);
+        if (sub && sub.underflow) this._fixChild(n, i);
+        return { underflow: n.keys.length < this.MIN };
+      }
+      if (right.keys.length > this.MIN) {
+        const succ = this._minKey(right);
+        this._log(`${key} 住在内部节点里：用右子树的最小键 ${succ} 顶替（后继），再到那个子树里把 ${succ} 删掉`,
+                  `${key} lives in an internal node: replace it with the successor ${succ}, the minimum of the right subtree, then delete ${succ} down there`,
+                  n.id, `内部节点上的键：后继顶替`, `internal key: take the successor`);
+        const sub = this._remove(right, succ);
+        const was = n.keys[i];
+        n.keys[i] = succ;                 // 先改结构再留痕，画面和旁白同一时刻
+        this._log(`后继 ${succ} 接替 ${was} 的键位：这个节点现在是 [${label(n)}]`,
+                  `The successor ${succ} takes over the slot of ${was}: the node now reads [${label(n)}]`, n.id,
+                  `后继补位完成`, `the successor is in place`);
+        if (sub && sub.underflow) this._fixChild(n, i + 1);
+        return { underflow: n.keys.length < this.MIN };
+      }
+      this._log(`左右孩子都只有 ${this.MIN} 个键，谁都借不出：把 ${key} 拉下来，和两个半边合并成一个满节点`,
+                `Both children hold just ${this.MIN} keys and can lend nothing: pull ${key} down and merge the two halves into one full node`,
+                n.id, `两边都借不动：键拉下来合并`, `neither side can lend: pull the key down and merge`);
+      this._merge(n, i);
+      const sub = this._remove(n.children[i], key);
+      if (sub && sub.underflow) this._fixChild(n, i);
+      return { underflow: n.keys.length < this.MIN };
+    }
+
+    /* 下降之前保证第 i 个孩子"摘掉一个键之后仍然够"：至少 MIN+1 个键。
+     * 返回补完之后这个孩子的下标（和左兄弟合并的话会减一）。 */
     _topUp(n, i) {
       const c = n.children[i];
-      if (!c || c.keys.length > this.MIN) return;
-      this._log(`第 ${i + 1} 个孩子只有 ${c.keys.length} 个键：删之前先借或合`,
-                `Child ${i + 1} holds only ${c.keys.length} keys: borrow or merge before deleting`, c.id,
-                `先补够再往下`, `top it up before descending`);
-      this._fill(n, i);
+      if (!c || c.keys.length > this.MIN) return i;
+      this._log(`第 ${i + 1} 个孩子只有 ${c.keys.length} 个键：先补够再往下，免得到时候欠账`,
+                `Child ${i + 1} holds only ${c.keys.length} keys: top it up before descending so it cannot run short`,
+                c.id, `先补够再往下`, `top it up before descending`);
+      return this._fill(n, i);
     }
 
-    /* 孩子删完不够了：借得到就借，借不到就合 */
+    /* 孩子删完不够了：借得到就借，借不到就合。下降前先补够的话不该发生，这是兜底。 */
     _fixChild(n, i) {
       const c = n.children[i];
-      if (!c || c.keys.length >= this.MIN) return;
-      if (n.children.length > 1) this._fill(n, i);
+      if (!c || c.keys.length >= this.MIN) return i;
+      this._log(`第 ${i + 1} 个孩子删完只剩 ${c.keys.length} 个键，低于下限 ${this.MIN}：向兄弟借或合并`,
+                `Child ${i + 1} fell to ${c.keys.length} keys, below the minimum ${this.MIN}: borrow from a sibling or merge`,
+                c.id, `欠账了，就地补`, `short by one, fix it here`);
+      return this._fill(n, i);
     }
 
+    /* 子树里的最大/最小键：一路走到底（B+ 树的最小键也一定在左边的叶子里） */
     _maxKey(n) { while (!n.leaf) n = n.children[n.children.length - 1]; return n.keys[n.keys.length - 1]; }
+    _minKey(n) { while (!n.leaf) n = n.children[0]; return n.keys[0]; }
 
-    _maxKey(n) { while (!n.leaf) n = n.children[n.children.length - 1]; return n.keys[n.keys.length - 1]; }
-
-    /* 保证第 i 个孩子至少有 MIN+1 个键：先借，借不到就合 */
+    /* 保证第 i 个孩子至少有 MIN+1 个键：先向左右兄弟借，借不到就合。
+     * 返回"补完之后这个孩子落在哪个下标"——和左兄弟合并的话会减一，
+     * 调用者（下降/回溯）要接着用这个新下标。 */
     _fill(n, i) {
       const c = n.children[i];
-      if (i > 0 && n.children[i - 1].keys.length > this.MIN) {
-        const left = n.children[i - 1];
-        const up = n.keys[i - 1];
-        if (this.plus) {
-          const moved = left.keys.pop();
-          const sep = left.keys[left.keys.length - 1];
-          n.keys[i - 1] = sep;
-          c.keys.unshift(moved);
-          this._log(`对左边兄弟借一个：${moved} 挪到 [${label(c)}]，分隔键换成 ${sep}`,
-                    `Borrow from the left sibling: ${moved} moves to [${label(c)}] and the separator becomes ${sep}`,
-                    c.id, `向左兄弟借`, `borrow from the left`);
-        } else {
-          const moved = left.keys.pop();
-          c.keys.unshift(up);
-          n.keys[i - 1] = moved;
-          this._log(`对左边兄弟借一个：分隔键 ${up} 下来，${moved} 上去当新的分隔键`,
-                    `Borrow from the left sibling: the separator ${up} moves down and ${moved} takes its place`,
-                    c.id, `向左兄弟借`, `borrow from the left`);
-        }
-        return;
-      }
-      if (i < n.children.length - 1 && n.children[i + 1].keys.length > this.MIN) {
-        const right = n.children[i + 1];
-        const up = n.keys[i];
-        if (this.plus) {
-          const moved = right.keys.shift();
-          n.keys[i] = right.keys[0];
-          c.keys.push(moved);
-          this._log(`对右边兄弟借一个：${moved} 挪到 [${label(c)}]，分隔键换成 ${n.keys[i]}`,
-                    `Borrow from the right sibling: ${moved} moves to [${label(c)}] and the separator becomes ${n.keys[i]}`,
-                    c.id, `向右兄弟借`, `borrow from the right`);
-        } else {
-          const moved = right.keys.shift();
-          c.keys.push(up);
-          n.keys[i] = moved;
-          this._log(`对右边兄弟借一个：分隔键 ${up} 下来，${moved} 上去当新的分隔键`,
-                    `Borrow from the right sibling: the separator ${up} moves down and ${moved} takes its place`,
-                    c.id, `向右兄弟借`, `borrow from the right`);
-        }
-        return;
-      }
-      /* 两边都借不到：合并 */
-      if (i < n.children.length - 1) {
-        this._merge(n, i);
-      } else {
-        this._merge(n, i - 1);
-      }
+      if (i > 0 && n.children[i - 1].keys.length > this.MIN) return this._borrowFromLeft(n, i);
+      if (i < n.children.length - 1 && n.children[i + 1].keys.length > this.MIN) return this._borrowFromRight(n, i);
+      /* 两边都没有富余：合并。左边有兄弟就往左并，否则（i 是最后一个孩子）并 i-1 和 i */
+      const at = i < n.children.length - 1 ? i : i - 1;
+      this._merge(n, at);
+      return at;
     }
 
+    /* 向左兄弟借一个键（它有富余）。B+ 树的分隔键含义是"右子树的最小键"，
+     * 所以分隔键要换成搬过来的那个键；搬的是内部节点时，孩子指针也得一起搬。 */
+    _borrowFromLeft(n, i) {
+      const c = n.children[i], left = n.children[i - 1];
+      const sep = n.keys[i - 1];
+      if (this.plus && !c.leaf) {
+        /* 内部节点搬的是"最后一个孩子"：它自己的最小键在父节点里（就是 sep），
+         * 所以只有 sep 下来给这个孩子当左边界；那个孩子的最小键升上去当新分隔键。
+         * 搬一个孩子只加一个键 —— 多加一个键就会出现"3 个键配 3 个孩子"。 */
+        const movedKey = left.keys.pop();
+        const movedChild = left.children.pop();
+        c.children.unshift(movedChild);
+        c.keys.unshift(sep);
+        n.keys[i - 1] = movedKey;
+        this._log(`向左兄弟借：孩子 [${label(movedChild)}] 搬过来（原分隔键 ${sep} 下来当它的左边界），它的最小键 ${movedKey} 升上去当新的分隔键`,
+                  `Borrow from the left sibling: child [${label(movedChild)}] moves over (the old separator ${sep} drops in as its left bound) and its smallest key ${movedKey} goes up as the new separator`,
+                  c.id, `向左兄弟借（内部节点：连孩子一起搬）`, `borrow left (internal: a child moves too)`);
+        return i;
+      }
+      const moved = left.keys.pop();
+      if (!c.leaf) c.children.unshift(left.children.pop());
+      if (this.plus) {
+        c.keys.unshift(moved);
+        n.keys[i - 1] = moved;
+        this._log(`向左兄弟借：${moved} 挪到 [${label(c)}]，它成了这半边的最小键，分隔键跟着换成 ${moved}`,
+                  `Borrow from the left sibling: ${moved} moves to [${label(c)}] and becomes its smallest key, so the separator becomes ${moved}`,
+                  c.id, `向左兄弟借`, `borrow from the left`);
+      } else {
+        c.keys.unshift(sep);
+        n.keys[i - 1] = moved;
+        this._log(`向左兄弟借：分隔键 ${sep} 下来当 ${label(c)} 里最小的键，${moved} 上去当新的分隔键`,
+                  `Borrow from the left sibling: the separator ${sep} drops in as the smallest key of [${label(c)}], and ${moved} takes its place as separator`,
+                  c.id, `向左兄弟借`, `borrow from the left`);
+      }
+      return i;
+    }
+
+    /* 向右兄弟借一个键（它有富余）。 */
+    _borrowFromRight(n, i) {
+      const c = n.children[i], right = n.children[i + 1];
+      const sep = n.keys[i];
+      if (this.plus && !c.leaf) {
+        const movedChild = right.children.shift();
+        const movedKey = right.keys.shift();
+        c.children.push(movedChild);
+        c.keys.push(sep);              // sep 就是搬来的这个孩子的最小键
+        n.keys[i] = movedKey;          // 右兄弟挪走第一个孩子后，最小键变成它原来的第一个分隔键
+        this._log(`向右兄弟借：孩子 [${label(movedChild)}] 搬过来，配的最小键是原分隔键 ${sep}；右兄弟新的最小键 ${movedKey} 上去当分隔键`,
+                  `Borrow from the right sibling: child [${label(movedChild)}] moves over with the old separator ${sep} as its smallest key; the sibling's new smallest key ${movedKey} goes up as the separator`,
+                  c.id, `向右兄弟借（内部节点：连孩子一起搬）`, `borrow right (internal: a child moves too)`);
+        return i;
+      }
+      const moved = right.keys.shift();
+      if (!c.leaf) c.children.push(right.children.shift());
+      if (this.plus) {
+        c.keys.push(moved);
+        n.keys[i] = right.keys[0];
+        this._log(`向右兄弟借：${moved} 挪到 [${label(c)}]，右兄弟新的最小键 ${n.keys[i]} 上去当分隔键`,
+                  `Borrow from the right sibling: ${moved} moves to [${label(c)}]; the sibling's new smallest key ${n.keys[i]} goes up as the separator`,
+                  c.id, `向右兄弟借`, `borrow from the right`);
+      } else {
+        c.keys.push(sep);
+        n.keys[i] = moved;
+        this._log(`向右兄弟借：分隔键 ${sep} 下来当 ${label(c)} 里最大的键，${moved} 上去当新的分隔键`,
+                  `Borrow from the right sibling: the separator ${sep} drops in as the largest key of [${label(c)}], and ${moved} takes its place as separator`,
+                  c.id, `向右兄弟借`, `borrow from the right`);
+      }
+      return i;
+    }
+
+    /* 合并：左边吞掉右边，父节点少一个键和一个孩子（下标 i 的那个分隔键消失）。
+     * B 树：分隔键本身就是记录，必须一起下来。
+     * B+ 树：两个叶子合并时，分隔键只是叶子里那个键的复制品，丢掉；
+     *        两个内部节点合并时，分隔键得下来给孩子指针当边界。 */
     _merge(n, i) {
       const left = n.children[i], right = n.children[i + 1];
-      if (this.plus) {
-        /* B+ 树：被删掉的分隔键不再需要，直接并叶子 */
+      const sep = n.keys[i];
+      if (this.plus && left.leaf) {
         left.keys = left.keys.concat(right.keys);
-        left.children = left.children.concat(right.children);
         n.keys.splice(i, 1);
         n.children.splice(i + 1, 1);
-        this._log(`两边都借不到：叶子合并成 [${label(left)}]，父节点少一个分隔键`,
-                  `Neither sibling can lend: the leaves merge into [${label(left)}] and the parent loses a separator`,
-                  left.id, `叶子合并`, `merge the leaves`);
+        this._log(`两边都借不到：两个叶子合并成 [${label(left)}]（分隔键 ${sep} 只是复制品，直接丢掉）`,
+                  `Neither sibling can lend: the two leaves merge into [${label(left)}] and the separator ${sep} is simply dropped, it was only a copy`,
+                  left.id, `叶子合并，分隔键丢掉`, `merge the leaves, drop the separator`);
       } else {
-        const sep = n.keys[i];
         left.keys = left.keys.concat([sep], right.keys);
         left.children = left.children.concat(right.children);
         n.keys.splice(i, 1);
@@ -422,6 +509,22 @@
       this._log(`合并之后父节点是 [${n.keys.length ? label(n) : '空'}]${n.keys.length ? '' : '：它自己也少了，向上继续处理'}`,
                 `After the merge the parent reads [${n.keys.length ? label(n) : 'empty'}]${n.keys.length ? '' : ': it is short too, so handle it upwards'}`,
                 n.id, `看看父节点够不够`, `check whether the parent is still fine`);
+      return i;
+    }
+
+    /* B+ 树：第 i 个孩子的最小键变了，父节点里对应的分隔键要跟着改。
+     * 第 0 个孩子没有分隔键 —— 它的上界由更上一层去修（回溯会一路修上去）。 */
+    _refreshSeparator(n, i) {
+      if (i <= 0) return i;
+      const old = n.keys[i - 1];
+      const mn = this._minKey(n.children[i]);
+      if (old !== mn) {
+        n.keys[i - 1] = mn;               // 先改结构再留痕，画面才是"改完之后"的样子
+        this._log(`第 ${i + 1} 个孩子的最小键变成 ${mn}：分隔键从 ${old} 改成 ${mn}，导航才走得对`,
+                  `The smallest key of child ${i + 1} is now ${mn}: the separator changes from ${old} to ${mn} so navigation stays correct`,
+                  n.id, `分隔键跟着改`, `the separator follows`);
+      }
+      return i;
     }
 
     _relinkIfPlus() { if (this.plus) this._relink(); }
@@ -501,7 +604,8 @@
     Session: sessionFor(true),
     makeTree: () => makeTree(true)
   };
+  /* 浏览器里两个页面各取一个；Node 里一次给出两个供工具使用 */
   global.BTreePage = BTreeAPI;
+  global.BPlusPage = BPlusAPI;
   if (typeof module !== 'undefined' && module.exports) module.exports = { BTreeAPI, BPlusAPI };
-  else global.BPlusPage = BPlusAPI;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -39,7 +39,10 @@
       step.nodes.forEach((n, i) => {
         if (!n || typeof n !== 'object') { e.push(`${where}.nodes[${i}]: 不是对象`); return; }
         if (n.id == null) e.push(`${where}.nodes[${i}].id: 缺少稳定身份`);
-        if (n.key == null) e.push(`${where}.nodes[${i}].key: 缺少键值`);
+        /* 节点至少要能说明"自己是哪个键"：单键节点看 key，
+         * 多键节点（B 树 / B+ 树）看 keys 数组 —— 它们的键不止一个。 */
+        const hasKeys = Array.isArray(n.keys) && n.keys.length > 0;
+        if (n.key == null && !hasKeys) e.push(`${where}.nodes[${i}].key: 缺少键值`);
       });
     }
     /* focus 契约：要么是本帧存在的节点 id，要么用 pendingKey 声明"还没创建" */

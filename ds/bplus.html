@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B+ 树 · 单步理解</title>
+<link rel="stylesheet" href="../shared/classic.css">
+<link rel="stylesheet" href="../shared/treeview.css">
+<link rel="stylesheet" href="../shared/tree-page.css">
+<style>
+/* 本页自己的样式（左右栏比例等）。配色与零件全部来自 shared/classic.css。 */
+  /* 一个节点里要横排多个键，节点比二叉的宽 */
+  .wrap{grid-template-columns:minmax(500px,1.35fr) minmax(360px,1fr)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <a class="back" href="../index.html">← Slow-Mo CS</a>
+    <span id="title"></span><small id="tagline"></small>
+    <button id="lang" class="lang">EN</button>
+  </h1>
+  <div class="opbar">
+    <div id="opMeta" class="op-meta"></div>
+    <div class="op-box" id="opBox"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <main class="left">
+    <div class="array-wrap" id="arrayWrap" hidden></div>
+    <div class="stage" id="stage"></div>
+    <p class="hint" id="hint"></p>
+    <div class="timeline" id="timeline"></div>
+  </main>
+
+  <aside class="right">
+    <div class="scene">
+      <div class="tagline" id="eyebrow"></div>
+      <h2 id="sceneTitle"></h2>
+      <p class="act" id="sceneAct"></p>
+      <p id="sceneText"></p>
+      <div class="metrics" id="metrics"></div>
+    </div>
+    <table class="cx" id="cx"></table>
+    <p class="note" id="note"></p>
+  </aside>
+</div>
+
+<footer>
+  <button class="ctl" id="prev" title="上一步 / previous" aria-label="上一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 6.5 10l6 5.5"/></svg>
+  </button>
+  <button class="ctl primary" id="next" title="下一步 / next" aria-label="下一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13.5 10l-6 5.5"/></svg>
+  </button>
+  <button class="ctl" id="play" title="自动播放 / play" aria-label="自动播放"></button>
+  <button class="ctl" id="reset" title="重置 / reset" aria-label="重置">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.4a5.6 5.6 0 1 0 5.6 5.6"/><path d="M10 2v4.6H5.4"/></svg>
+  </button>
+  <div class="bar"><i id="prog"></i></div>
+  <span class="counter" id="counter"></span>
+  <span class="kbd">←</span><span class="kbd">→</span>
+</footer>
+
+<script src="../shared/stepper.js"></script>
+<script src="../shared/trace.js"></script>
+<script src="../shared/tree-session.js"></script>
+<script src="../shared/steps.js"></script>
+<script src="../shared/frames.js"></script>
+<script src="../shared/algo-ui.js"></script>
+<script src="../shared/treeview.js"></script>
+<script src="../shared/tree-state.js"></script>
+<script src="../shared/session-ui.js"></script>
+<script src="../shared/tree-page.js"></script>
+<script src="./btree.js"></script>
+<script src="./bplus.page.js"></script>
+<script>SlowMoTreePage.start(window.__TREE_PAGE__);</script>
+</body>
+</html>

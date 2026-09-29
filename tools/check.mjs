@@ -147,7 +147,10 @@ for (const topic of TOPICS) {
           .forEach(p => fail(`${label}#${i + 1}（结算帧）`, p.what, p.detail));
       }
       if (i > 0) {
-        Frames.diffFrames(steps[i - 1].nodes, s.nodes, { bulkDelete: !!(topic.policy && topic.policy.bulkDelete) })
+        Frames.diffFrames(steps[i - 1].nodes, s.nodes, {
+          bulkDelete: !!(topic.policy && topic.policy.bulkDelete),
+          multiChildDiff: !!(topic.policy && topic.policy.multiChildDiff)
+        })
           .problems.forEach(p => fail(`${label}#${i + 1}`, p.what, p.detail));
       }
     });
@@ -157,8 +160,13 @@ for (const topic of TOPICS) {
     if (last) {
       Frames.checkSettled(last.nodes, topic.policy)
         .forEach(p => fail(`${label} 结束帧`, p.what, p.detail));
-      const keys = last.nodes.map(n => n.key);
-      if (new Set(keys).size !== keys.length) fail(`${label} 结束帧`, '仍有重复键', keys.join(','));
+      /* B+ 树的分隔键本来就是叶子键的副本，所以那条"键必须唯一"对它是错的。
+       * 多键节点（B 树 / B+ 树）用 keys 数组表达，取第一个键做代表。 */
+      if (!(topic.policy && topic.policy.separatorsMayRepeat)) {
+        const keys = last.nodes.map(n => (n.key != null ? n.key : (n.keys || [])[0]));
+        if (keys.some(k => k == null)) fail(`${label} 结束帧`, '有节点没有键值', JSON.stringify(keys));
+        else if (new Set(keys).size !== keys.length) fail(`${label} 结束帧`, '仍有重复键', keys.join(','));
+      }
       notes.push(`${sc.zh} → ${steps.length} 帧`);
       topicFrames['/' + topic.page] = Math.max(topicFrames['/' + topic.page] || 0, steps.length);
       topicFrames[topic.page] = Math.max(topicFrames[topic.page] || 0, steps.length);

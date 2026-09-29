@@ -16,6 +16,42 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 
 export const TOPICS = [
   {
+    id: 'btree',
+    debug: 'BTREE_DEBUG',
+    name: { zh: 'B 树', en: 'B-tree' },
+    page: 'ds/btree.html',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/btree.js')).BTreeAPI }),
+    sourceFile: 'ds/btree.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '插入 45 55', run: () => algo.ops.insert([45, 55]) },
+      { key: 'search', zh: '查找 50', run: () => algo.ops.search(50) },
+      { key: 'delete', zh: '删除 20（触发借位/合并）', run: () => algo.ops.delete(20) }
+    ],
+    members: ['insert', 'find', 'remove', '_split'],
+    /* 多路树：每节点最多 4 个孩子；分裂天生一步出现两个节点 */
+    policy: { maxChildren: 4, multiChildDiff: true },
+    session: (algo) => new algo.Session()
+  },
+
+  {
+    id: 'bplus',
+    debug: 'BPLUS_DEBUG',
+    name: { zh: 'B+ 树', en: 'B+ tree' },
+    page: 'ds/bplus.html',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/btree.js')).BPlusAPI }),
+    sourceFile: 'ds/btree.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '插入 45 55', run: () => algo.ops.insert([45, 55]) },
+      { key: 'search', zh: '查找 50', run: () => algo.ops.search(50) },
+      { key: 'delete', zh: '删除 20（叶子链与分隔键都要维护）', run: () => algo.ops.delete(20) }
+    ],
+    members: ['insert', 'find', 'remove', '_split'],
+    /* 多路树 + 分隔键是叶子键的副本，所以"键唯一"对它不成立 */
+    policy: { maxChildren: 4, multiChildDiff: true, separatorsMayRepeat: true },
+    session: (algo) => new algo.Session()
+  },
+
+  {
     id: 'general',
     debug: 'GENERAL_DEBUG',
     name: { zh: '普通树 / 多叉树', en: 'General / n-ary tree' },
