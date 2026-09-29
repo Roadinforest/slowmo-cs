@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>五种 I/O 模型 · 单步动画</title>
-<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="../shared/classic.css">
 </head>
 <body>
 
@@ -31,12 +31,19 @@
 <div id="tablewrap"></div>
 
 <footer>
-  <button class="ctl" id="prev">◀ 上一步</button>
-  <button class="ctl primary" id="next">下一步 ▶</button>
-  <button class="ctl" id="play">▶ 自动播放</button>
-  <button class="ctl" id="reset">↺ 重置</button>
+  <button class="ctl" id="prev" title="上一步 / previous" aria-label="上一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 6.5 10l6 5.5"/></svg>
+  </button>
+  <button class="ctl primary" id="next" title="下一步 / next" aria-label="下一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13.5 10l-6 5.5"/></svg>
+  </button>
+  <button class="ctl" id="play" title="自动播放 / play" aria-label="自动播放"></button>
+  <button class="ctl" id="reset" title="重置 / reset" aria-label="重置">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.4a5.6 5.6 0 1 0 5.6 5.6"/><path d="M10 2v4.6H5.4"/></svg>
+  </button>
   <div class="bar"><i id="prog"></i></div>
   <span class="counter" id="counter"></span>
+  <span class="kbd">←</span><span class="kbd">→</span>
 </footer>
 
 <script src="../shared/stepper.js"></script>
@@ -77,6 +84,22 @@ const ctl = SlowMo.controls(stepper, {
   enabled: () => !document.body.classList.contains('tablemode')
 });
 let code = null;                   // SlowMo.codeLines 的返回值
+
+/* 页脚是几何图标，不是文字。SlowMo.controls 默认会写按钮 textContent，
+ * 那会把 <svg> 图标顶掉，所以这里接管 sync()：进度、计数、禁用态、播放态。
+ * 按钮文案交给 title / aria-label。 */
+ctl.sync = function () {
+  const bar = el('prog');
+  if (bar) bar.style.width = stepper.length ? ((stepper.index + 1) / stepper.length * 100) + '%' : '0';
+  const counter = el('counter');
+  if (counter) counter.textContent = (stepper.index + 1) + ' / ' + stepper.length;
+  const prev = el('prev'), next = el('next');
+  if (prev) prev.disabled = stepper.atStart;
+  if (next) next.disabled = stepper.atEnd;
+  const playBtn = el('play');
+  if (playBtn) playBtn.classList.toggle('playing', stepper.isPlaying);
+};
+ctl.labels = function () {};
 
 /* ---------------- 标签页 ---------------- */
 function buildTabs(){

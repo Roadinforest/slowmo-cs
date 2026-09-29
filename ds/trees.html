@@ -5,20 +5,61 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="用单步动画理解常见树结构的性质与复杂度">
   <title>常见树结构 · 单步理解</title>
-  <link rel="stylesheet" href="../shared/theme.css">
+  <link rel="stylesheet" href="../shared/classic.css">
   <style>
-    body{min-height:100vh}.tree-main{flex:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);min-height:0}
-    .stage{padding:24px clamp(18px,3vw,44px);display:flex;flex-direction:column;gap:16px;overflow:auto;background:radial-gradient(circle at 50% 12%,rgba(210,168,255,.09),transparent 30%),var(--bg)}
-    .eyebrow{color:#d2a8ff;text-transform:uppercase;letter-spacing:.12em;font:700 11px var(--mono)}
-    .scene-title{font-size:clamp(22px,3vw,34px);line-height:1.2;margin:0;letter-spacing:-.04em}.scene-copy{font-size:16px;line-height:1.75;color:#c9d1d9;margin:0;max-width:62ch}.scene-copy b{color:#79c0ff}.scene-copy strong{color:#f0c674}.scene-copy code{font-family:var(--mono);font-size:.85em;background:#21262d;padding:2px 5px;border-radius:4px}
-    .diagram{height:290px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(135deg,rgba(22,27,34,.95),rgba(13,17,23,.95));overflow:hidden;position:relative}.diagram svg{width:100%;height:100%;display:block}.edge{stroke:#4b5563;stroke-width:2}.edge.hot{stroke:#79c0ff;stroke-width:3}.node rect{fill:#202833;stroke:#586574;stroke-width:1.5}.node .label{fill:#e6edf3;font:600 14px var(--mono);text-anchor:middle;dominant-baseline:middle}.node.hot rect{fill:#12355b;stroke:#58a6ff;stroke-width:2.5}.node.hot .label{fill:#fff}.node.red rect{fill:#5b2330;stroke:#f85149}.node.black rect{fill:#111820;stroke:#8b949e}.node.leaf rect{fill:#17332a;stroke:#3fb950}.node.multi rect{rx:9}.leafline{stroke:#3fb950;stroke-width:2;stroke-dasharray:5 4}.legend{position:absolute;right:12px;bottom:9px;color:var(--dim);font-size:11px;font-family:var(--mono)}
-    aside{padding:20px;overflow:auto;background:#10151d;border-left:1px solid var(--line)}.summary{padding-bottom:16px;border-bottom:1px solid var(--line)}.summary h2{font-size:18px;margin:4px 0 5px}.summary p{color:var(--dim);margin:0;font-size:13px}.use{margin-top:10px;padding:8px 10px;border:1px solid rgba(210,168,255,.28);background:rgba(210,168,255,.07);border-radius:8px;color:#d8dce3;font-size:12.5px}.use b{color:#d2a8ff}
-    .features{margin-top:13px}.features h3{font:600 12px var(--mono);color:var(--dim);margin:0 0 7px}.features ul{margin:0;padding-left:19px;color:#c9d1d9;font-size:13px;line-height:1.65}.features li+li{margin-top:3px}
-    .complexity{width:100%;margin:16px 0 5px;border-collapse:separate;border-spacing:0;font-size:13px}.complexity th,.complexity td{padding:8px 7px;border-bottom:1px solid var(--line);text-align:left}.complexity th{color:var(--dim);font-weight:500}.complexity td:nth-child(3),.complexity td:nth-child(4){font-family:var(--mono);color:#79c0ff;white-space:nowrap}.complexity td:first-child{font-weight:600}.footnote{font-size:11.5px;color:var(--mute);line-height:1.55;margin:7px 0 18px}.why{border:1px solid var(--line);border-radius:10px;background:#161b22;overflow:hidden}.why-head{font:600 12px var(--mono);color:var(--dim);padding:8px 11px;border-bottom:1px solid var(--line)}.why-line{display:flex;gap:10px;padding:6px 10px;color:#b7c1cc;font:12px/1.45 var(--mono)}.why-line i{font-style:normal;color:#586574;min-width:15px;text-align:right}
-    .steps{display:flex;gap:7px;flex-wrap:wrap;padding-top:4px}.step{font:12px var(--mono);padding:6px 9px;color:var(--dim);border:1px solid var(--line);background:#161b22;border-radius:7px;cursor:pointer}.step:hover{border-color:#657383;color:var(--fg)}.step.on{border-color:#58a6ff;color:#fff;background:#12355b}.step.done{color:#a7d8b4;border-color:rgba(63,185,80,.42)}
-    .op-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.op-tabs{display:flex;gap:8px;flex-wrap:wrap}.op-tab{border:1px solid var(--line);background:#161b22;color:var(--dim);padding:7px 12px;border-radius:8px;font:600 13px var(--mono);cursor:pointer}.op-tab:hover{color:var(--fg);border-color:#657383}.op-tab.on{color:#0d1117;background:#d2a8ff;border-color:#d2a8ff}.op-target{border-left:1px solid var(--line);padding-left:10px;color:#c9d1d9;font:13px var(--mono)}.op-target b{color:#f0c674}.op-target[hidden]{display:none}.step-meta{display:flex;gap:8px;flex-wrap:wrap}.metric{border:1px solid rgba(88,166,255,.4);background:rgba(88,166,255,.08);color:#79c0ff;border-radius:999px;padding:4px 11px;font:12px var(--mono)}
-    @media(max-width:850px){.tree-main{grid-template-columns:1fr}.stage{overflow:visible}.diagram{height:240px}aside{border-left:0;border-top:1px solid var(--line);overflow:visible}body{display:block}footer{position:sticky;bottom:0}}
-  </style>
+  /* 这一页是早期版本，保留自己的两栏布局；配色与零件全部来自 shared/classic.css */
+  .tree-main{flex:1;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);
+    min-height:0;overflow:hidden}
+  .stage{padding:24px clamp(18px,3vw,44px);display:flex;flex-direction:column;gap:16px;
+    overflow:auto;background:var(--paper)}
+  .stage .diagram{height:300px;border:1px solid var(--rule);border-radius:var(--radius);
+    background:var(--stage-bg);overflow:hidden;position:relative}
+  .diagram svg{width:100%;height:100%;display:block}
+  /* 这一页的树是早期实现，自己那套 SVG 类要在这里定色 */
+  .edge{stroke:var(--edge);stroke-width:1;fill:none}
+  .edge.hot{stroke:var(--accent);stroke-width:1.5}
+  .node rect{fill:var(--node-fill);stroke:var(--node-line);stroke-width:1}
+  .node .label{fill:var(--node-ink);font:600 14px var(--serif);text-anchor:middle;dominant-baseline:middle}
+  .node.hot rect{fill:var(--accent);stroke:var(--accent)}
+  .node.hot .label{fill:var(--paper)}
+  .node.red rect{fill:#f3e2e2;stroke:var(--accent)}
+  .node.black rect{fill:#2b2a26;stroke:#2b2a26}
+  .node.black .label{fill:var(--paper)}
+  .node.leaf rect{fill:#e8efe9;stroke:var(--ok)}
+  .node.multi rect{rx:3}
+  .leafline{stroke:var(--ok);stroke-width:1;stroke-dasharray:3 3;fill:none}
+  aside{padding:22px;overflow:auto;background:var(--paper-2);border-left:1px solid var(--rule)}
+  .legend{position:absolute;right:12px;bottom:9px;color:var(--faint);font-size:11px;font-family:var(--serif);font-style:italic}
+  .footnote{font-size:12px;color:var(--muted);line-height:1.6;margin:8px 0 18px}
+  .why{border-top:1px solid var(--rule);padding-top:10px}
+  .why-line{display:flex;gap:12px;padding:5px 0;color:var(--ink-2);font:12.5px var(--mono)}
+  .why-line i{font-style:normal;color:var(--faint);min-width:16px;text-align:right}
+  .op-row{display:flex;align-items:baseline;gap:22px;flex-wrap:wrap}
+  .op-target{color:var(--muted);font-style:italic}
+  .op-target b{color:var(--ink);font-style:normal}
+  .step-meta{display:flex;gap:10px;flex-wrap:wrap}
+  .metric{border:1px solid var(--rule);border-radius:999px;padding:3px 10px;
+    font:400 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .steps{display:flex;gap:14px;flex-wrap:wrap;padding-top:6px}
+  .step{font:400 12px var(--sans);color:var(--faint);background:none;border:0;
+    border-bottom:1px solid transparent;padding:2px 0;cursor:pointer}
+  .step.done{color:var(--muted)}
+  .step.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .scene-title{font-size:clamp(22px,3vw,32px);font-weight:400;line-height:1.25;margin:0}
+  .scene-copy{font-size:15.5px;line-height:1.75;color:var(--ink-2);margin:0;max-width:62ch}
+  .scene-copy b{color:var(--accent)}
+  .scene-copy strong{color:var(--gold)}
+  .scene-copy code{background:var(--paper-3);padding:1px 5px;border-radius:3px}
+  .eyebrow{font:400 10.5px var(--sans);letter-spacing:.2em;text-transform:uppercase;color:var(--faint)}
+  .summary h2{font-weight:400;font-size:20px;margin:6px 0 4px}
+  .summary p{color:var(--muted);margin:0;font-size:13px}
+  .use{margin-top:10px;padding:9px 11px;border:1px solid var(--rule);border-radius:2px;
+    background:var(--paper);color:var(--ink-2);font-size:12.5px}
+  .use b{color:var(--accent);font-family:var(--sans);font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-right:5px}
+  .features h3{font:400 10.5px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:14px 0 7px}
+  .features ul{margin:0;padding-left:18px;color:var(--ink-2);font-size:13.5px;line-height:1.7}
+  @media(max-width:900px){.tree-main{grid-template-columns:1fr}aside{border-left:0;border-top:1px solid var(--rule)}}
+</style>
 </head>
 <body>
   <header>
@@ -43,7 +84,10 @@
     </aside>
   </div>
   <footer>
-    <button id="prev" class="ctl">◀</button><button id="next" class="ctl primary">▶</button><button id="play" class="ctl">▶</button><button id="reset" class="ctl">↺</button>
+    <button id="prev" class="ctl" title="上一步 / previous" aria-label="上一步"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 6.5 10l6 5.5"/></svg></button>
+    <button id="next" class="ctl primary" title="下一步 / next" aria-label="下一步"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13.5 10l-6 5.5"/></svg></button>
+    <button id="play" class="ctl" title="自动播放 / play" aria-label="自动播放"></button>
+    <button id="reset" class="ctl" title="重置 / reset" aria-label="重置"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.4a5.6 5.6 0 1 0 5.6 5.6"/><path d="M10 2v4.6H5.4"/></svg></button>
     <div class="bar"><i id="prog"></i></div><span class="counter" id="counter"></span>
   </footer>
   <script src="../shared/stepper.js"></script>
@@ -55,6 +99,12 @@
   const UI={zh:{title:'常见树结构 · 单步理解',side:'结构摘要',features:'核心特点',target:'目标：',use:'工程用途：',op:'操作',common:'常见 / 平衡',worst:'最坏',why:'为什么会是这个复杂度？',prev:'◀ 上一步',next:'下一步 ▶',play:'▶ 自动播放',pause:'⏸ 暂停',reset:'↺ 重置',legend:'蓝色 = 当前关注位置'},en:{title:'Common trees · Step by step',side:'Structure summary',features:'Key characteristics',target:'Target: ',use:'Used for: ',op:'Operation',common:'Typical / balanced',worst:'Worst case',why:'Why this complexity?',prev:'◀ Prev',next:'Next ▶',play:'▶ Auto play',pause:'⏸ Pause',reset:'↺ Reset',legend:'blue = current focus'}};
   const stepper=new SlowMo.Stepper({length:1,interval:2200,onChange:applyStep});
   const labels={}; const ctl=SlowMo.controls(stepper,{prev:'#prev',next:'#next',play:'#play',reset:'#reset',progress:'#prog',counter:'#counter',labels});
+  /* 页脚是几何图标：接管 sync/labels，别让库把文字写进按钮 */
+  ctl.sync=function(){const bar=$('prog');if(bar)bar.style.width=stepper.length?((stepper.index+1)/stepper.length*100)+'%':'0';
+    const c=$('counter');if(c)c.textContent=(stepper.index+1)+' / '+stepper.length;
+    if($('prev'))$('prev').disabled=stepper.atStart; if($('next'))$('next').disabled=stepper.atEnd;
+    if($('play'))$('play').classList.toggle('playing',stepper.isPlaying)};
+  ctl.labels=function(){};
   function n(id,x,y,label,kind=''){return {id,x,y,label,kind}}
   const diagrams={
     general:{nodes:[n('root',50,34,'根'),n('docs',23,116,'文档'),n('projects',50,116,'项目'),n('media',78,116,'媒体'),n('report',14,205,'报告.pdf'),n('new',40,205,'新文件'),n('app',57,205,'App'),n('assets',82,205,'素材')],edges:[['root','docs'],['root','projects'],['root','media'],['docs','report'],['docs','new'],['projects','app'],['media','assets']]},

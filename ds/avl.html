@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AVL 树 · 单步理解</title>
+<link rel="stylesheet" href="../shared/classic.css">
+<link rel="stylesheet" href="../shared/treeview.css">
+<style>
+  /* 本页布局：左边画布、右边解说。配色与零件来自 shared/classic.css。 */
+  .wrap{
+    flex:1;display:grid;grid-template-columns:minmax(420px,1.2fr) minmax(360px,1fr);
+    grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden;
+  }
+  .left{padding:26px clamp(18px,4vw,54px);display:flex;flex-direction:column;min-width:0;min-height:0}
+  .right{
+    border-left:1px solid var(--rule);background:var(--paper-2);
+    display:flex;flex-direction:column;min-width:0;overflow:auto;
+  }
+  .chips{
+    display:flex;gap:2px;flex-wrap:wrap;padding:16px clamp(18px,3vw,30px) 14px;
+    border-bottom:1px solid var(--rule-soft);max-height:132px;overflow:auto;
+  }
+  .step{
+    background:none;border:0;cursor:pointer;padding:3px 6px;
+    font:400 12px var(--sans);color:var(--faint);
+    border-bottom:1px solid transparent;transition:.15s;
+  }
+  .step:hover{color:var(--ink)}
+  .step.done{color:var(--muted)}
+  .step.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .scene{padding:22px clamp(18px,3vw,30px) 24px}
+  .scene h2{margin:0;font-weight:400;font-size:27px;line-height:1.25;letter-spacing:-.005em}
+  .act{margin:12px 0 0;font-size:15.5px;line-height:1.7;color:var(--ink-2);
+    padding-left:14px;border-left:2px solid var(--rule)}
+  #sceneText{margin:12px 0 0;font-size:14px;color:var(--muted);font-style:italic}
+  #sceneText b{color:var(--danger);font-style:normal;font-weight:600}
+  .metrics{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;
+    border-top:1px solid var(--rule-soft);padding-top:12px}
+  .metric{font:400 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .metric::before{content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+    background:var(--rule);margin-right:7px;vertical-align:2px}
+  .metric.warn{color:var(--danger)}
+  .metric.warn::before{background:var(--danger)}
+  table.cx{margin-top:auto;border-top:1px solid var(--rule)}
+  .note{margin:0;padding:16px clamp(18px,3vw,30px) 26px;font-size:12.5px;font-style:italic;
+    color:var(--faint);line-height:1.7;border-top:1px solid var(--rule)}
+  .tagline{font:400 10.5px var(--sans);letter-spacing:.2em;text-transform:uppercase;
+    color:var(--faint);margin-bottom:10px}
+  @media(max-width:1000px){
+    .wrap{grid-template-columns:1fr;grid-template-rows:auto auto;overflow:auto}
+    .right{border-left:0;border-top:1px solid var(--rule)}
+    .left{min-height:360px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <a class="back" href="../index.html">← Slow-Mo CS</a>
+    <span id="title"></span><small id="tagline"></small>
+    <button id="lang" class="lang">EN</button>
+  </h1>
+  <div class="opbar">
+    <div id="optabs"></div>
+    <div class="target" id="target" hidden></div>
+    <div style="margin-left:auto;display:flex;gap:6px" id="opsteps"></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <main class="left">
+    <div class="stage" id="stage"></div>
+  </main>
+
+  <aside class="right">
+    <div class="chips" id="chips"></div>
+    <div class="scene">
+      <div class="tagline" id="eyebrow"></div>
+      <h2 id="sceneTitle"></h2>
+      <p class="act" id="sceneAct"></p>
+      <p id="sceneText"></p>
+      <div class="metrics" id="metrics"></div>
+    </div>
+    <table class="cx" id="cx"></table>
+    <p class="note" id="note"></p>
+  </aside>
+</div>
+
+<footer>
+  <button class="ctl" id="prev" title="上一步 / previous" aria-label="上一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 6.5 10l6 5.5"/></svg>
+  </button>
+  <button class="ctl primary" id="next" title="下一步 / next" aria-label="下一步">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 4.5 13.5 10l-6 5.5"/></svg>
+  </button>
+  <button class="ctl" id="play" title="自动播放 / play" aria-label="自动播放"></button>
+  <button class="ctl" id="reset" title="重置 / reset" aria-label="重置">
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.4a5.6 5.6 0 1 0 5.6 5.6"/><path d="M10 2v4.6H5.4"/></svg>
+  </button>
+  <div class="bar"><i id="prog"></i></div>
+  <span class="counter" id="counter"></span>
+  <span class="kbd">←</span><span class="kbd">→</span>
+</footer>
+
+<script src="../shared/stepper.js"></script>
+<script src="../shared/algo-ui.js"></script>
+<script src="../shared/treeview.js"></script>
+<script src="./avl.code.js"></script>
+<script src="./avl.js"></script>
+<script>
+/* =====================================================================
+ * AVL 树 —— 页面只写"main"：注册操作 → 跑算法拿真实轨迹 → 绑到 DOM
+ * 算法在 avl.js，绑定引擎在 shared/treeview.js，这里只做胶水。
+ * ===================================================================== */
+(function () {
+  'use strict';
+  const AVL = window.AVLTree, Kit = window.AlgoKit;
+  const el = id => document.getElementById(id);
+
+  /* ---------------- 文案 ---------------- */
+  const UI = {
+    zh: { title:'AVL 树 · 单步理解', tagline:'严格平衡的二叉搜索树：左右子树高度差不超过 1',
+          target:'目标：', step:'第 %s 步', of:'共 %s 步',
+          prev:'◀ 上一步', next:'下一步 ▶', play:'▶ 自动播放', pause:'⏸ 暂停', reset:'↺ 重置',
+          note:'画面直接来自算法自己的结构快照：树是真长出来的，不是画死的示意图。',
+          balanced:'此刻每个节点的平衡因子都在 ±1 之内。',
+          pending:'<b>%s</b> 已经创建，但还没接到树上 —— 画布上暂时看不到它。',
+          unbalanced:'失衡节点：<b>%s</b> —— 必须旋转。',
+          cx:[['查找','O(log n)','O(log n)'],['插入','O(log n)','O(log n)'],['删除','O(log n)','O(log n)']],
+          cxHead:['操作','典型','最坏'] },
+    en: { title:'AVL tree · Step by step', tagline:'A strictly balanced BST: child heights differ by at most 1',
+          target:'Target: ', step:'step %s', of:'of %s',
+          prev:'◀ Prev', next:'Next ▶', play:'▶ Auto play', pause:'⏸ Pause', reset:'↺ Reset',
+          note:'Every frame comes from the algorithm\u2019s own structural snapshot: the tree really grows, nothing is drawn by hand.',
+          balanced:'Every node is within ±1 right now.',
+          pending:'<b>%s</b> is created but not linked into the tree yet — it is not on the canvas.',
+          unbalanced:'Out of balance: <b>%s</b> — a rotation is required.',
+          cx:[['Search','O(log n)','O(log n)'],['Insert','O(log n)','O(log n)'],['Delete','O(log n)','O(log n)']],
+          cxHead:['Operation','Typical','Worst'] }
+  };
+  const I18N = SlowMo.i18n(null, 'slowmo-avl-lang');
+  const t = x => (Array.isArray(x) ? x[I18N.lang === 'en' ? 1 : 0] : I18N.t(x));
+  const T = L => t(L);
+
+  /* =====================================================================
+   * MAIN：三个操作各跑一遍真实算法，得到三条真实轨迹
+   * ===================================================================== */
+  const SCENARIOS = [
+    { key:'insert', name:{zh:'插入',en:'Insert'}, target:{zh:'依次插入 50 30 70 20 40 45',en:'insert 50 30 70 20 40 45 in order'},
+      run: () => AVL.ops.insert([50, 30, 70, 20, 40, 45]) },
+    { key:'search', name:{zh:'查找',en:'Search'}, target:{zh:'查找键 40',en:'find key 40'},
+      run: () => AVL.ops.search(40) },
+    { key:'delete', name:{zh:'删除',en:'Delete'}, target:{zh:'删除有两个孩子的节点 50',en:'delete node 50, which has two children'},
+      run: () => AVL.ops.delete(50) }
+  ];
+
+  /* 每个操作要把代码面板聚焦到哪几行（行号由 avl.js 的真实源码算出来） */
+  const FOCUS = {
+    insert: ['insert', 'rebalance', 'rotateRight', 'rotateLeft'],
+    search: ['find'],
+    delete: ['remove', 'rebalance', 'rotateRight', 'rotateLeft']
+  };
+
+  /* ---------------- 状态 ---------------- */
+  const stage = el('stage');
+  const view = TreeView.mount(stage, { emptyText: '—' });
+  const stepper = new SlowMo.Stepper({ length: 1, interval: 1500, onChange: applyStep });
+  const labels = {};
+  const ctl = SlowMo.controls(stepper, { prev:'#prev', next:'#next', play:'#play', reset:'#reset',
+    progress:'#prog', counter:'#counter', labels });
+
+  /* 页脚是几何图标，不是文字。
+   * SlowMo.controls 默认会把按钮 textContent 写成文案，那会把 <svg> 图标顶掉，
+   * 所以这里整体接管 sync()：只做进度、计数器、禁用态和播放图标。 */
+  ctl.sync = function () {
+    const bar = document.getElementById('prog');
+    if (bar) bar.style.width = stepper.length ? ((stepper.index + 1) / stepper.length * 100) + '%' : '0';
+    const counter = document.getElementById('counter');
+    if (counter) counter.textContent = (stepper.index + 1) + ' / ' + stepper.length;
+    const prev = document.getElementById('prev'), next = document.getElementById('next');
+    if (prev) prev.disabled = stepper.atStart;
+    if (next) next.disabled = stepper.atEnd;
+    const playBtn = document.getElementById('play');
+    if (playBtn) playBtn.classList.toggle('playing', stepper.isPlaying);
+  };
+  ctl.labels = function () {};   // 文案全部由图标与 title 承担
+
+  let chips = null, steps = [], cur = 0;
+
+  /* ---------------- 算法记录 → 视图状态（全部由结构推导） ---------------- */
+  function viewStateFor(step, prevStep) {
+    const nodes = step.nodes || [];
+    if (!nodes.length) return { nodes: [], focus: null, note: '' };
+
+    /* 身份是 id，不是 key：删除时后继的 key 会被复制到目标节点上，
+     * 那一刻树里有两个相同 key，用 key 当身份会认错节点。 */
+    const focusOnTree = step.focus != null && nodes.some(n => n.id === step.focus);
+    let focus = focusOnTree ? step.focus
+      : nodes.reduce((a, b) => (b.height > a.height ? b : a), nodes[0]).id;
+
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    /* 根到焦点的路径：只在焦点确实在树上时才有意义 */
+    const path = new Set();
+    if (focusOnTree) for (let k = focus; k != null; k = byId.get(k) ? byId.get(k).parent : null) path.add(k);
+
+    const before = prevStep && prevStep.nodes ? new Set(prevStep.nodes.map(n => n.id)) : null;
+    const previous = prevStep && prevStep.nodes ? new Map(prevStep.nodes.map(n => [n.id, n])) : null;
+
+    const kidsOf = new Map();
+    nodes.forEach(n => {
+      if (n.parent == null) return;
+      if (!kidsOf.has(n.parent)) kidsOf.set(n.parent, []);
+      kidsOf.get(n.parent).push(n.id);
+    });
+
+    const out = nodes.map(n => {
+      const kids = (kidsOf.get(n.id) || []).map(k => byId.get(k));
+      const hl = kids.find(c => c.key < n.key), hr = kids.find(c => c.key > n.key);
+      const bf = (hl ? hl.height : 0) - (hr ? hr.height : 0);
+
+      const cls = [];
+      if (path.has(n.id) && n.id !== focus) cls.push('visit');
+      if (n.id === focus && focusOnTree) cls.push('now');
+      if (before && !before.has(n.id)) cls.push('inserted');                  // 刚长出来的
+      if (previous) {
+        const was = previous.get(n.id);
+        if (was && was.parent !== n.parent) cls.push('rotated');              // 父子关系变了 = 旋转
+      }
+      if (Math.abs(bf) > 1) cls.push('unbalanced');                           // 必须旋转
+
+      return {
+        key: n.id,                    // 身份
+        parent: n.parent,
+        label: String(n.key),         // 显示的是键值（删除时它会变）
+        sub: 'h' + n.height + ' · bf ' + (bf > 0 ? '+' : '') + bf,
+        badge: Math.abs(bf) > 1 ? 'bf ' + (bf > 0 ? '+' : '') + bf : '',
+        state: cls.join(' '),
+        bf, height: n.height
+      };
+    });
+    return { nodes: out, focus, note: '' };
+  }
+
+  /* ---------------- 每一帧 ---------------- */
+  function applyStep(i) {
+    const step = steps[i];
+    if (!step) return;
+    const prev = i > 0 ? steps[i - 1] : null;
+
+    const vs = viewStateFor(step, prev);
+    view.update(vs);
+
+    /* 这一步在干什么 —— 一句话，算法自己给的 */
+    const u = UI[I18N.lang];
+    el('eyebrow').textContent = T(SCENARIOS[cur].name) + ' · ' + u.step.replace('%s', i + 1).replace('%s', steps.length);
+    el('sceneTitle').textContent = step.act ? t(step.act) : t(step.text);
+    el('sceneAct').textContent = t(step.text);
+
+    const unbalanced = vs.nodes.filter(n => n.badge).map(n => n.key);
+    /* 焦点可能是"刚创建、还没接进树"的节点：那它不在图上，要说清楚 */
+    const pending = step.focus != null && !step.nodes.some(n => n.key === step.focus);
+    el('sceneText').innerHTML = pending
+      ? u.pending.replace('%s', step.focus)
+      : (unbalanced.length ? u.unbalanced.replace('%s', unbalanced.join(', ')) : u.balanced);
+
+    /* 指标：只留和这一步有关的 */
+    const m = el('metrics'); m.innerHTML = '';
+    const add = (txt, warn) => { const sp = document.createElement('span'); sp.className = 'metric' + (warn ? ' warn' : ''); sp.textContent = txt; m.appendChild(sp); };
+    add(u.of.replace('%s', steps.length) + ' · ' + (i + 1));
+    add('n = ' + step.nodes.length);
+    add('h = ' + steps.reduce((a, x) => Math.max(a, x.nodes.reduce((m, n) => Math.max(m, n.height), 0)), 0) && step.nodes.length ? 'h = ' + step.nodes.reduce((a, n) => Math.max(a, n.height), 0) : 'h = 0');
+    if (unbalanced.length) {
+      const b = vs.nodes.find(n => n.badge).bf;
+      add('bf ' + (b > 0 ? '+' : '') + b, true);
+    }
+    add('focus ' + (vs.focus != null ? vs.focus : '—'));
+
+    chips.update(i);
+    ctl.sync();
+  }
+
+  /* ---------------- 场景切换 ---------------- */
+  function showScenario(i) {
+    cur = i;
+    const sc = SCENARIOS[i];
+    const rec = sc.run();
+    steps = rec.entries.map(e => ({ text: e.text, act: e.act, focus: e.focus, nodes: e.nodes }));
+    chips = Kit.stepChips(el('chips'), steps, k => { stepper.pause(); stepper.go(k); });
+    el('target').hidden = false;
+    el('target').innerHTML = UI[I18N.lang].target + '<b>' + T(sc.target) + '</b>';
+    renderTabs();
+    stepper.pause();
+    stepper.length = steps.length;
+    stepper.go(0);
+  }
+
+  /* ---------------- 标签页 ---------------- */
+  function renderTabs() {
+    const box = el('optabs'); box.innerHTML = '';
+    SCENARIOS.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.className = 'optab' + (i === cur ? ' on' : '');
+      b.textContent = T(s.name);
+      b.onclick = () => showScenario(i);
+      box.appendChild(b);
+    });
+  }
+
+  /* ---------------- 语言 ---------------- */
+  function relabel() {
+    Object.assign(labels, {
+      prev: UI[I18N.lang].prev, next: UI[I18N.lang].next,
+      play: UI[I18N.lang].play, pause: UI[I18N.lang].pause, reset: UI[I18N.lang].reset
+    });
+    ctl.labels(); ctl.sync();
+    document.documentElement.lang = I18N.lang === 'zh' ? 'zh-CN' : 'en';
+    document.title = UI[I18N.lang].title;
+    el('title').textContent = UI[I18N.lang].title.split(' · ')[0];
+    el('tagline').textContent = UI[I18N.lang].tagline;
+    el('lang').textContent = I18N.lang === 'zh' ? 'EN' : '中文';
+    el('note').textContent = UI[I18N.lang].note;
+    Kit.table(el('cx'), UI[I18N.lang].cx, UI[I18N.lang].cxHead);
+    if (chips) chips.setLabels(I18N.lang);
+    renderTabs();
+    el('target').innerHTML = UI[I18N.lang].target + '<b>' + T(SCENARIOS[cur].target) + '</b>';
+  }
+  el('lang').onclick = () => { I18N.toggle(); relabel(); applyStep(stepper.index); };
+
+  /* ---------------- 自检：算法记录的行号必须都有效 ---------------- */
+  const audit = AVL.auditLogTargets('AVL');
+  if (audit.problems.length) console.error('AVL 行号自检失败', audit.problems);
+  else console.log('AVL 行号自检通过：' + audit.count + ' 个记录点');
+
+  /* 调试/审阅出口：控制台可以看每一步的真实状态 */
+  window.AVL_DEBUG = {
+    /* 同一帧：算法状态 / 视图状态 / DOM 三者对照 */
+    probe: (i) => {
+      stepper.pause(); stepper.go(i);
+      const st = steps[i];
+      const vs = viewStateFor(st, i > 0 ? steps[i - 1] : null);
+      return {
+        i: i + 1,
+        stepNodes: st.nodes.map(n => n.id),
+        focus: st.focus,
+        viewNodes: vs.nodes.map(n => n.key),
+        viewFocus: vs.focus,
+        domNodes: [...document.querySelectorAll('#stage g.tn')].map(g => g.getAttribute('data-key')),
+        domClasses: [...document.querySelectorAll('#stage g.tn')].map(g => g.getAttribute('class'))
+      };
+    },
+    steps: () => steps,
+    state: () => ({ cur, index: stepper.index, steps: steps.length }),
+    view: () => view.state,
+    go: (i) => { stepper.pause(); stepper.go(i); },
+    scenario: (i) => showScenario(i),
+    counts: () => ({
+      stateNodes: (steps[stepper.index] || {}).nodes.length,
+      domNodes: document.querySelectorAll('#stage g.tn:not(.removed)').length,
+      domEdges: [...document.querySelectorAll('#stage line.tv-edge')].filter(l => l.style.opacity !== '0').length,
+      focus: (steps[stepper.index] || {}).focus
+    })
+  };
+
+  relabel();
+  showScenario(0);
+})();
+</script>
+</body>
+</html>

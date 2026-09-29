@@ -1,0 +1,99 @@
+/*!
+ * Slow-Mo CS — tree view（结构与状态）
+ * 这里只定义"有什么元素、有哪些状态"，颜色与字体全部取自 CSS 变量，
+ * 具体颜色与字体取自 shared/classic.css 的令牌。
+ *
+ * 元素结构（由 shared/treeview.js 生成）：
+ *   svg.tv > g.tv-root > g.tv-edges > line.tv-edge
+ *                       > g.tv-nodes > g.tn > rect.tn-box
+ *                                            text.tn-label
+ *                                            text.tn-sub
+ *                                            text.tn-badge
+ *                                            circle.tn-dot
+ *                       > text.tv-note
+ *
+ * 状态（挂在 g.tn 上）：
+ *   visit · now · inserted · rotated · unbalanced · removed
+ */
+
+.stage{
+  position:relative;overflow:auto;
+  background:var(--stage-bg,#fbf9f4);
+  border:1px solid var(--line,#c9c2b4);
+  border-radius:var(--radius,6px);
+  /* 画布给足高度：树是主角，宁可页面留白也不让它滚动或缩小 */
+  flex:1 1 auto;height:clamp(360px,54vh,560px);min-height:340px;
+}
+.stage svg.tv{display:block;max-width:none}
+/* 缩略图（审阅页等）：整幅缩进小盒子里 */
+.tv-thumb svg.tv{max-width:100%;max-height:100%}
+
+/* ---- 边：一条细线，不加装饰 ---- */
+.tv-edge{
+  stroke:var(--edge,#b9b0a0);stroke-width:1;fill:none;
+  transition:stroke .25s ease,stroke-width .25s ease;
+}
+.tv-edge.hot{stroke:var(--accent,#8c2f39);stroke-width:1.5}
+.tv-edge.ghost{stroke:var(--edge,#b9b0a0);stroke-dasharray:3 4}
+
+/* ---- 节点 ---- */
+g.tn{transition:transform .45s cubic-bezier(.33,1,.68,1),opacity .3s ease}
+g.tn .tn-box{
+  fill:var(--node-fill,#fdfcf8);stroke:var(--node-line,#8c8474);stroke-width:1;
+  transition:fill .25s ease,stroke .25s ease;
+}
+g.tn .tn-label{
+  fill:var(--node-ink,#22201c);font-family:var(--serif,Georgia,"Songti SC",serif);
+  font-size:15px;font-weight:600;dominant-baseline:middle;
+}
+g.tn .tn-sub{
+  fill:var(--node-sub,#9a917f);font-family:var(--serif,Georgia,serif);
+  font-size:10px;font-style:italic;dominant-baseline:middle;
+}
+g.tn .tn-dot{fill:var(--accent,#8c2f39);opacity:0;transition:opacity .25s ease}
+g.tn.now .tn-dot{opacity:1}
+
+/* 正在走的路径：只把底色压暖、描边加深，不抢焦点 */
+g.tn.visit .tn-box{fill:var(--visit-fill,#f4f0e6);stroke:var(--accent,#8c2f39)}
+
+/* 当前焦点：全页唯一用实心的地方 */
+g.tn.now .tn-box{fill:var(--accent,#8c2f39);stroke:var(--accent,#8c2f39)}
+g.tn.now .tn-label{fill:var(--paper,#fbf9f4)}
+g.tn.now .tn-sub{fill:var(--paper,#fbf9f4);opacity:.75}
+g.tn.now .tn-dot{fill:var(--paper,#fbf9f4)}
+
+/* 刚长出来：墨绿 */
+g.tn.inserted .tn-box{stroke:var(--ok,#2f5d50);stroke-width:1.5}
+g.tn.inserted .tn-label{fill:var(--ok,#2f5d50)}
+
+/* 旋转波及：靛蓝 */
+g.tn.rotated .tn-box{stroke:var(--rot,#3f4d6b);stroke-width:1.5}
+g.tn.rotated .tn-label{fill:var(--rot,#3f4d6b)}
+
+/* 失衡：细红描边 + 角标 */
+g.tn.unbalanced .tn-box{stroke:var(--danger,#8c2f39);stroke-width:1.5}
+g.tn.unbalanced .tn-label{fill:var(--danger,#8c2f39)}
+g.tn .tn-badge{
+  fill:var(--danger,#8c2f39);font-family:var(--serif,Georgia,serif);
+  font-size:9.5px;font-style:italic;dominant-baseline:middle;display:none;
+}
+g.tn.unbalanced .tn-badge{display:block}
+
+/* 删除：淡出 */
+g.tn.removed{opacity:0}
+g.tn.removed .tn-box{stroke:var(--danger,#8c2f39);stroke-dasharray:2 2}
+
+/* 空槽位（插入目标位置） */
+g.tv-slot .tn-box{fill:none;stroke:var(--edge,#b9b0a0);stroke-dasharray:3 3}
+g.tv-slot .tn-label{fill:var(--node-sub,#9a917f)}
+
+.tv-note{fill:var(--muted,#7d7466);font-family:var(--serif,Georgia,serif);font-size:11px;font-style:italic}
+.tv-empty{
+  position:absolute;inset:0;display:grid;place-items:center;
+  color:var(--muted,#7d7466);font-family:var(--serif,Georgia,serif);
+  font-size:12px;font-style:italic;letter-spacing:.06em;
+}
+
+@media (prefers-reduced-motion: reduce){
+  g.tn,.tv-edge,.tn-box{transition:none}
+}

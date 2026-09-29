@@ -34,6 +34,7 @@ Open **`index.html`**. That is the whole setup.
 | --- | --- | --- |
 | OS | [Five I/O Models](os/io-models.html) — blocking, non-blocking, multiplexing, signal-driven, async | ✅ playable |
 | Data structures | [Common tree structures](ds/trees.html) — N-ary, binary, BST, AVL, red-black, heap, B-tree, B+ tree | ✅ playable |
+| Data structures | [AVL tree](ds/avl.html) — the real algorithm, traced: insert, search, delete, rotations | ✅ playable |
 | Data structures | Red-black tree rotations (next to AVL) | planned |
 | Data structures | Heaps — sift-up / sift-down | planned |
 | Data structures | Hash table collisions, load factor, rehashing | planned |
@@ -54,14 +55,40 @@ slowmo-cs/
 ├── os/
 │   ├── io-models.html      # one topic: rendering + wiring
 │   └── io-models.data.js   # one topic: content and steps
+├── ds/
+│   ├── avl.html            # one topic: main() only — registers ops, binds the trace
+│   ├── avl.js              # the real AVL algorithm + its trace recorder
+│   ├── avl.code.js         # generated: the class source for the code panel
+│   ├── trees.html          # the older, hand-drawn tree tour
+│   └── trees.data.js
 └── shared/
-    ├── theme.css           # design tokens and the shared parts
-    └── stepper.js          # the step engine
+    ├── classic.css         # the whole design system (tokens + every component)
+    ├── stepper.js          # the step engine
+    ├── treeview.js         # algorithm state -> persistent DOM binding
+    ├── treeview.css        # the tree's states (colors come from classic.css)
+    └── algo-ui.js          # code panel, step chips, tables
 ```
 
-Every topic page owns its own visualization and its own `steps` array.
 `stepper.js` only handles *time* — the cursor, autoplay, the progress bar, the
-keyboard. `theme.css` only handles *looks*. Nobody touches anybody else's state.
+keyboard. `classic.css` only handles *looks*. `treeview.js` only handles
+*binding*. Nobody touches anybody else's state.
+
+### Two kinds of topic page
+
+**Hand-drawn** (`os/io-models.html`, `ds/trees.html`) — you author a `steps`
+array of snapshots and write a `draw(step)`.
+
+**Algorithm-driven** (`ds/avl.html`) — you write the algorithm, it records its
+own trace, and the page is just a `main`:
+
+```js
+const rec = AVL.ops.insert([50, 30, 70, 20, 40, 45]);   // real run, real snapshots
+steps = rec.entries;                                     // [{text, act, focus, nodes}]
+TreeView.mount(stage).update(viewStateFor(steps[i]));     // persistent DOM binding
+```
+
+The tree on screen is the algorithm's own structural snapshot — node identity is
+a stable `id`, `key` is just data it carries. Nothing is drawn by hand.
 
 ## Adding a topic
 
@@ -83,7 +110,10 @@ Two rules keep it honest:
 2. **Steps are data.** Keep them in `topic.data.js`, out of the rendering file.
    That file doubles as the thing people read to learn the topic.
 
-Copy `os/io-models.html` and start hacking.
+Copy `os/io-models.html` and start hacking. For a real algorithm, copy `ds/avl.js`
++ `ds/avl.html` instead: implement the structure, push one record per step
+(`line`, `text`, `act`, `focus`, `nodes`), and let `shared/treeview.js` do the
+drawing.
 
 ## License
 
