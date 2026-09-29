@@ -69,10 +69,12 @@ slowmo-cs/
 │   ├── frames.js           # structural invariants (one root, no cycles, heap/RB rules)
 │   ├── treeview.js         # algorithm state -> persistent DOM binding (+ array view)
 │   ├── treeview.css        # the tree's states (colors come from classic.css)
+│   ├── trees-render.js     # hand-drawn diagrams: layout + SVG (browser AND node)
 │   └── algo-ui.js          # step chips, tables
 └── tools/
     ├── check.mjs           # content + structure + gallery, no browser needed
     ├── review.mjs          # browser: errors, frame parity, buttons, mobile
+    ├── trees-page.mjs      # hand-drawn page: data, scenes, and what actually renders
     └── topics.mjs          # the registry: where each topic's algorithm lives
 ```
 
@@ -83,7 +85,13 @@ keyboard. `classic.css` only handles *looks*. `treeview.js` only handles
 ### Two kinds of topic page
 
 **Hand-drawn** (`os/io-models.html`, `ds/trees.html`) — you author a `steps`
-array of snapshots and write a `draw(step)`.
+array of snapshots. The layout and drawing live in `shared/trees-render.js`, and
+that module is loaded by *both* the page and `tools/trees-page.mjs`: the same
+code that puts pixels on screen is the code the checker runs, so "the data is
+fine but nothing appears" is a build failure instead of something you notice
+months later. That layer caught two real defects the data checks could not see:
+B+ leaf-chain cells that never entered the layout at all, and two nodes landing
+on the same pixel in four diagrams.
 
 **Algorithm-driven** (`ds/avl.html`, `ds/rbt.html`, `ds/heap.html`) — you write the
 algorithm as a subclass of `Trace` (`shared/trace.js`), it records its own run, and

@@ -9,10 +9,13 @@
  *   4. 相邻帧的差异"一步能解释"（一次旋转最多动 4 个节点的父子关系）
  *   5. 结算帧（line == null）必须完全合法：不靠 allowTransient 蒙混
  *   6. 每帧记录的行号确实落在算法代码上（行号是运行时从调用栈取的）
+ *   7. 手绘快照页的图与场景一致：节点可达、焦点有效、键序正确
+ *      （这一页的缺陷全在屏幕上看不出来：焦点悬空、节点不可达、图被静默丢掉）
  *
  * 退出码非 0 表示有失败项，可直接接 CI。
  */
 import { TOPICS } from './topics.mjs';
+import { checkTreesPage } from './trees-page.mjs';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -41,6 +44,13 @@ function walkAssets(htmlPath) {
   }
   refs.forEach(r => { if (!fs.existsSync(r.abs)) fail(path.relative(ROOT, htmlPath), '引用了不存在的文件', r.url); });
   return refs.length;
+}
+
+/* ------------------------------------------------- 手绘快照页的图与场景一致性 */
+{
+  const r = checkTreesPage(ROOT, 'ds/trees.html');
+  r.failures.forEach(f => failures.push(f));
+  r.notes.forEach(n => notes.push(n));
 }
 
 /* ---------------------------------------------------------------- 0. 展厅一致性
