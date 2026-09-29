@@ -18,11 +18,10 @@ export const TOPICS = [
     id: 'avl',
     name: { zh: 'AVL 树', en: 'AVL tree' },
     page: 'ds/avl.html',
-    /* 算法实现 + 源码解析器（后者只有 node 用） */
-    load: () => ({
-      algo: require(path.join(ROOT, 'ds/avl.js')),
-      src: require(path.join(ROOT, 'ds/avl.source.js'))
-    }),
+    /* 算法实现。行号由运行时从调用栈取，不再需要源码解析器。 */
+    load: () => ({ algo: require(path.join(ROOT, 'ds/avl.js')) }),
+    /* 算法源文件：用来核对"记录的行号确实落在算法代码里" */
+    sourceFile: 'ds/avl.js',
     /* 每个操作流：跑一遍真实算法，得到真实轨迹 */
     scenarios: (algo) => [
       { key: 'insert', zh: '依次插入 50 30 70 20 40 45', run: () => algo.ops.insert([50, 30, 70, 20, 40, 45]) },

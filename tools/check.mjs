@@ -8,7 +8,7 @@
  *   3. 每一帧的结构满足该主题的不变量（单根、无环、有序、平衡……）
  *   4. 相邻帧的差异"一步能解释"（一次旋转最多动 4 个节点的父子关系）
  *   5. 结算帧（line == null）必须完全合法：不靠 allowTransient 蒙混
- *   6. 算法里的 _log(行号) 指向的确实是一行可执行代码
+ *   6. 每帧记录的行号确实落在算法代码上（行号是运行时从调用栈取的）
  *
  * 退出码非 0 表示有失败项，可直接接 CI。
  */
@@ -84,7 +84,7 @@ for (const topic of TOPICS) {
     notes.push(`${topic.page}: 目录里还有生成物 ${generated.join(', ')} —— 页面已不需要，建议删除`);
   }
 
-  const { algo, src } = topic.load();
+  const { algo } = topic.load();
   const scenarios = topic.scenarios(algo);
   let frames = 0;
 
@@ -141,11 +141,26 @@ for (const topic of TOPICS) {
     checkedScenarios++;
   }
 
-  /* --- 6. 源码行号契约 --- */
-  if (src && src.auditLogTargets) {
-    const a = src.auditLogTargets('AVL');
-    a.problems.forEach(p => fail(where, '_log 行号指向不可执行的行', `call@${p.from} -> ${p.to} (${p.why})`));
-    notes.push(`_log 记录点 ${a.count} 个，全部落在可执行行上`);
+  /* --- 6. 行号契约 ---
+   * 行号是运行时从调用栈取的，所以不会漂移；但仍然要检查它指的是不是一行
+   * 真正的算法代码 —— 取错了（比如落在文件头部注释上）说明栈的判据坏了。 */
+  if (topic.sourceFile) {
+    const srcLines = fs.readFileSync(path.join(ROOT, topic.sourceFile), 'utf8').split('\n');
+    let seen = 0;
+    for (const sc of scenarios) {
+      const rec = sc.run();
+      for (const e of rec.entries) {
+        if (e.line == null) continue;
+        seen++;
+        const text = (srcLines[e.line - 1] || '').trim();
+        if (!text) fail(`${where}/${sc.key}`, '行号指向空行', `line ${e.line}`);
+        else if (/^(\/\/|\*|\/\*)/.test(text)) fail(`${where}/${sc.key}`, '行号指向注释', `line ${e.line}`);
+        else if (!/this\._log\(/.test(text)) {
+          notes.push(`⚠ ${where}/${sc.key}: line ${e.line} 不是 _log 调用点（${text.slice(0, 40)}）`);
+        }
+      }
+    }
+    notes.push(`行号取自调用栈：${seen} 个记录点，全部落在算法代码上`);
   }
   notes.push(`${topic.name.zh}: ${scenarios.length} 条操作流，${assetCount} 个静态引用`);
   checkedFrames += frames;
@@ -158,7 +173,7 @@ console.log(`\n检查 ${TOPICS.length} 个主题 / ${checkedScenarios} 条操作
 notes.forEach(n => console.log('  · ' + n));
 
 if (!failures.length) {
-  console.log('\n✓ 全部通过：契约、结构不变量、帧间差异、结算帧、源码行号\n');
+  console.log('\n✓ 全部通过：契约、结构不变量、帧间差异、结算帧、行号\n');
   process.exit(0);
 }
 console.log(`\n✗ ${failures.length} 处失败\n`);

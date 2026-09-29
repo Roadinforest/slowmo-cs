@@ -22,15 +22,39 @@
   }
 
   const h = n => (n ? n.height : 0);
+
+  /* 调用点的真实行号 —— 从调用栈取，不维护任何数字常量。
+   *
+   * 用 Error.captureStackTrace(err, fn)：V8 专门为"排除某函数及其上层"提供的，
+   * 所以它不受内联影响 —— 栈顶就是调用点。
+   * （按函数名过滤、显式标记帧都试过，都会被内联打乱：栈里有时出现助手、
+   *   有时直接是 _log 自己，结果不稳定。）
+   *
+   * 没有这个 API 的引擎退回到正则解析；最坏情况行号不准，不影响算法。 */
+  function callerLine(fn) {
+    if (typeof Error.captureStackTrace === 'function') {
+      const holder = {};
+      Error.captureStackTrace(holder, fn);
+      const frames = (holder.stack || '').split('\n');
+      for (let i = 1; i < frames.length; i++) {
+        const m = /:(\d+):\d+\)?\s*$/.exec(frames[i]);
+        if (m) return Number(m[1]);
+      }
+      return null;
+    }
+    const st = new Error().stack || '';
+    const m = /:([0-9]+):[0-9]+/.exec(st);
+    return m ? Number(m[1]) : null;
+  }
   const L = (zh, en) => [zh, en];
   const fmt = n => (n > 0 ? '+' : '') + n;
   const minNode = n => { while (n && n.left) n = n.left; return n; };
 
   class AVL {
-    constructor(rec) { this.root = null; this.rec = rec || null; }   // 面板行 2
+    constructor(rec) { this.root = null; this.rec = rec || null; }
 
-    /* 记录一步。第一个参数是在 classCode('AVL') 里的真实行号（1 起），
-     * 也就是代码面板上高亮的那一行；nodes 永远是此刻真实的结构，不是写死的图。 */
+    /* 记录一步。行号由 callerLine() 从调用栈取，所以这里只关心内容：
+     * text/act 是旁白，focus 是此刻在看哪个节点，nodes 是此刻真实的结构。 */
     /* 快照前先把高度字段结算成与结构一致。
      * 回溯途中父节点的 height 会短暂落后于结构，如果原样拍下来，
      * 画面上就会出现"图是新的、高度是旧的"。结算一步本来就属于这个算法，
@@ -48,8 +72,10 @@
       return n.height;
     }
 
-    _log(line, zh, en, focus, doZh, doEn, pendingKey) {   // 面板行 6
+    _log(zh, en, focus, doZh, doEn, pendingKey) {
       if (!this.rec) return;
+      /* 行号从调用栈取 —— 不维护数字常量，也就没有"改了代码、行号漂移"这回事。 */
+      const line = callerLine(this._log);
       const focusNode = focus != null ? this._find(this.root, focus) : null;
       /* 一条记录 = 一帧，全部由算法给出：
        *   line  代码行号（自检用）
@@ -75,7 +101,7 @@
     }
 
     /* ------------------------------------------------------------------ 旋转 */
-    rotateRight(y) {   // 面板行 12
+    rotateRight(y) {
       const x = y.left, t2 = x.right;
       x.right = y; y.left = t2;
       y.height = 1 + Math.max(h(y.left), h(y.right));
@@ -83,7 +109,7 @@
       return x;
     }
 
-    rotateLeft(x) {   // 面板行 20
+    rotateLeft(x) {
       const y = x.right, t2 = y.left;
       y.left = x; x.right = t2;
       x.height = 1 + Math.max(h(x.left), h(x.right));
@@ -95,25 +121,25 @@
      * 四种型别都从真实结构判定，不靠"插入的键"猜：
      *   重的一侧是单侧偏（孩子的外侧更高）→ 单旋；孩子的内侧更高 → 双旋。
      * 删除时同样成立，所以插入/删除共用这一段。 */
-    rebalance(node) {   // 面板行 32
+    rebalance(node) {
       if (node.bf > 1) {
         if (h(node.left.left) >= h(node.left.right)) { // 5 左左
-          this._log(75, `左左型（L 型）：以 ${node.key} 为轴右旋`,
+          this._log(`左左型（L 型）：以 ${node.key} 为轴右旋`,
                        `Left-left (L) case: rotate right at ${node.key}`, node.id, `以失衡节点为轴右旋`, `rotate right at the unbalanced node`);
           return this.rotateRight(node);
         }
-        this._log(80, `左右型（LR 型）：先对 ${node.left.key} 左旋、再对 ${node.key} 右旋`,
+        this._log(`左右型（LR 型）：先对 ${node.left.key} 左旋、再对 ${node.key} 右旋`,
                      `Left-right (LR) case: rotate left at ${node.left.key}, then right at ${node.key}`, node.id, `先对左孩子左旋，再右旋自己`, `rotate left at the left child, then right at the node`);
         node.left = this.rotateLeft(node.left);
         return this.rotateRight(node);
       }
       if (node.bf < -1) {
         if (h(node.right.right) >= h(node.right.left)) { // 10 右右
-          this._log(86, `右右型（R 型）：以 ${node.key} 为轴左旋`,
+          this._log(`右右型（R 型）：以 ${node.key} 为轴左旋`,
                         `Right-right (R) case: rotate left at ${node.key}`, node.id, `以失衡节点为轴左旋`, `rotate left at the unbalanced node`);
           return this.rotateLeft(node);
         }
-        this._log(91, `右左型（RL 型）：先对 ${node.right.key} 右旋、再对 ${node.key} 左旋`,
+        this._log(`右左型（RL 型）：先对 ${node.right.key} 右旋、再对 ${node.key} 左旋`,
                       `Right-left (RL) case: rotate right at ${node.right.key}, then left at ${node.key}`, node.id, `先对右孩子右旋，再左旋自己`, `rotate right at the right child, then left at the node`);
         node.right = this.rotateRight(node.right);
         return this.rotateLeft(node);
@@ -122,87 +148,87 @@
     }
 
     /* ------------------------------------------------------------------ 插入 */
-    insert(node, key) {   // 面板行 59
+    insert(node, key) {
       if (!node) {
-        this._log(98, `走到空位：${key} 将作为一个新叶子挂在这里`,
+        this._log(`走到空位：${key} 将作为一个新叶子挂在这里`,
                        `Reached an empty slot: ${key} will hang here as a new leaf`, null,
                        `走到空位，${key} 要挂在这里`, `empty slot: ${key} goes here`, key);
         const fresh = new AVLNode(key);                       // 先建出来，还没接进树
-        this._log(102, `${key} 已创建，但还没有接进树里`,
+        this._log(`${key} 已创建，但还没有接进树里`,
                        `${key} is created but not linked into the tree yet`, null,
                        `${key} 已创建，等待接入`, `${key} created, waiting to be linked`, key);
         return fresh;
       }
       if (key === node.key) {
-        this._log(108, `${key} 已存在，插入被忽略（AVL 的键唯一）`,
+        this._log(`${key} 已存在，插入被忽略（AVL 的键唯一）`,
                        `${key} already exists, insert ignored (AVL keys stay unique)`, node.id, `键已存在，跳过`, `key already exists, skip`);
         return node;
       }
       const goLeft = key < node.key;
-      this._log(113, `比较：${key} ${goLeft ? '<' : '>'} ${node.key}，向${goLeft ? '左' : '右'}走`,
+      this._log(`比较：${key} ${goLeft ? '<' : '>'} ${node.key}，向${goLeft ? '左' : '右'}走`,
                      `Compare: ${key} ${goLeft ? '<' : '>'} ${node.key}, go ${goLeft ? 'left' : 'right'}`, node.id, `比较后决定往哪边走`, `compare, then pick a side`);
       if (goLeft) node.left = this.insert(node.left, key);
       else node.right = this.insert(node.right, key);
-      this._log(117, `${key} 接到 ${node.key} 的${goLeft ? '左' : '右'}孩子上`,
+      this._log(`${key} 接到 ${node.key} 的${goLeft ? '左' : '右'}孩子上`,
                      `${key} is linked as the ${goLeft ? 'left' : 'right'} child of ${node.key}`, node.id,
                      `接到 ${node.key} 的${goLeft ? '左' : '右'}边`, `linked under ${node.key}`);
       node.height = 1 + Math.max(h(node.left), h(node.right));
-      this._log(121, `回溯到 ${node.key}：重算高度 h=${node.height}，bf=${fmt(node.bf)}`,
+      this._log(`回溯到 ${node.key}：重算高度 h=${node.height}，bf=${fmt(node.bf)}`,
                      `Unwind to ${node.key}: h=${node.height}, bf=${fmt(node.bf)}`, node.id, `回溯：更新高度与平衡因子`, `unwind: update height and balance factor`);
       if (node.bf > 1 || node.bf < -1) {
-        this._log(124, `${node.key} 的 bf=${fmt(node.bf)} 越过 ±1，这棵子树失衡`,
+        this._log(`${node.key} 的 bf=${fmt(node.bf)} 越过 ±1，这棵子树失衡`,
                        `${node.key} has bf=${fmt(node.bf)}, past ±1: this subtree is unbalanced`, node.id, `失去平衡，必须旋转`, `out of balance, a rotation is required`);
       }
       return this.rebalance(node);
     }
 
     /* ------------------------------------------------------------------ 查找 */
-    find(node, key) {   // 面板行 86
+    find(node, key) {
       while (node) {
         const cmp = key === node.key ? 0 : (key < node.key ? -1 : 1);
         if (cmp === 0) {
-          this._log(134, `命中：${key} 就是当前节点`, `Hit: ${key} is the current node`, node.id, `找到了`, `found it`);
+          this._log(`命中：${key} 就是当前节点`, `Hit: ${key} is the current node`, node.id, `找到了`, `found it`);
           return node;
         }
-        this._log(141, `比较：${key} ${cmp < 0 ? '<' : '>'} ${node.key}，向${cmp < 0 ? '左' : '右'}走`,
+        this._log(`比较：${key} ${cmp < 0 ? '<' : '>'} ${node.key}，向${cmp < 0 ? '左' : '右'}走`,
                        `Compare: ${key} ${cmp < 0 ? '<' : '>'} ${node.key}, go ${cmp < 0 ? 'left' : 'right'}`, node.id, `比较后决定往哪边走`, `compare, then pick a side`);
         node = cmp < 0 ? node.left : node.right;
       }
-      this._log(145, `走到空指针：${key} 不在树里，查找失败`,
+      this._log(`走到空指针：${key} 不在树里，查找失败`,
                     `Reached a null pointer: ${key} is not in the tree, search fails`, null, `走到空指针：不在这里`, `hit a null pointer: not in the tree`);
       return null;
     }
 
     /* ------------------------------------------------------------------ 删除 */
-    remove(node, key) {   // 面板行 103
+    remove(node, key) {
       if (!node) {
-        this._log(150, `${key} 不在这棵子树里`, `${key} is not in this subtree`, null, `这棵子树里没有它`, `not in this subtree`);
+        this._log(`${key} 不在这棵子树里`, `${key} is not in this subtree`, null, `这棵子树里没有它`, `not in this subtree`);
         return null;
       }
       if (key < node.key) {
-        this._log(154, `比较：${key} < ${node.key}，去左子树删`,
+        this._log(`比较：${key} < ${node.key}，去左子树删`,
                        `Compare: ${key} < ${node.key}, descend left`, node.id, `比当前节点小，往左找`, `smaller than this node, go left`);
         node.left = this.remove(node.left, key);
       } else if (key > node.key) {
-        this._log(158, `比较：${key} > ${node.key}，去右子树删`,
+        this._log(`比较：${key} > ${node.key}，去右子树删`,
                        `Compare: ${key} > ${node.key}, descend right`, node.id, `比当前节点大，往右找`, `greater than this node, go right`);
         node.right = this.remove(node.right, key);
       } else {
-        this._log(164, `命中 ${key}：它就是当前节点`, `Hit ${key}: this is the node to remove`, node.id, `找到要删的节点`, `found the node to delete`);
+        this._log(`命中 ${key}：它就是当前节点`, `Hit ${key}: this is the node to remove`, node.id, `找到要删的节点`, `found the node to delete`);
         if (!node.left || !node.right) {
           const only = node.left || node.right;
-          this._log(164, `${key} 至多一个孩子，直接用${only ? '孩子 ' + only.key : '空指针'}顶替`,
+          this._log(`${key} 至多一个孩子，直接用${only ? '孩子 ' + only.key : '空指针'}顶替`,
                          `${key} has at most one child, replace it with ${only ? 'child ' + only.key : 'null'}`, node.id, `至多一个孩子：直接顶替`, `at most one child: splice it out`);
           return only;
         }
         const s = minNode(node.right);
-        this._log(170, `${key} 有两个孩子：右子树最小键 ${s.key} 是中序后继，用它顶替`,
+        this._log(`${key} 有两个孩子：右子树最小键 ${s.key} 是中序后继，用它顶替`,
                        `${key} has two children: the inorder successor is ${s.key}, the minimum of the right subtree`, s.id, `两个孩子：找中序后继顶替`, `two children: promote the inorder successor`);
         node.key = s.key;
         node.right = this.remove(node.right, s.key);
       }
       node.height = 1 + Math.max(h(node.left), h(node.right));
-      this._log(176, `回溯到 ${node.key}：重算高度 h=${node.height}，bf=${fmt(node.bf)}`,
+      this._log(`回溯到 ${node.key}：重算高度 h=${node.height}，bf=${fmt(node.bf)}`,
                      `Unwind to ${node.key}: h=${node.height}, bf=${fmt(node.bf)}`, node.id, `回溯：更新高度与平衡因子`, `unwind: update height and balance factor`);
       return this.rebalance(node);
     }
@@ -272,9 +298,6 @@
                          `${key} removed: height ${h(tree.root)}, root is ${tree.root ? tree.root.key : '—'}`);
     return rec;
   }
-
-  /* 算法只到这里。源码解析（classCode / 行号自检）已移到 ds/avl.source.js，
-   * 那是 node 侧工具用的，页面不再需要 —— 右边已是大白话，不显示源码。 */
 
   const API = { AVL, AVLNode, snapshot, SEED, h, L, seedTree,
                 ops: { insert: opInsert, search: opSearch, delete: opDelete } };

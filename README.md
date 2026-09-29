@@ -58,7 +58,6 @@ slowmo-cs/
 ├── ds/
 │   ├── avl.html            # one topic: main() only — registers ops, binds the trace
 │   ├── avl.js              # the real AVL algorithm + its trace recorder
-│   ├── avl.source.js       # node-only: reads the class source, audits line numbers
 │   ├── trees.html          # the older, hand-drawn tree tour
 │   └── trees.data.js
 ├── shared/
@@ -135,6 +134,9 @@ node tools/review.mjs     # 浏览器侧：运行时错误、逐帧 DOM 对照�
 - **the step contract** (`shared/steps.js`) — every frame carries a bilingual
   `text`, a stable node `id` per node, and a `focus` that either exists in that
   frame or is declared with `pendingKey`
+- **line numbers taken from the call stack** — a frame records where it was
+  emitted via `Error.captureStackTrace(err, this._log)`, so there is no
+  hand-maintained constant to drift when the algorithm is edited
 - **structural invariants** (`shared/frames.js`) — one root, no cycles, parent
   pointers reachable, children ordered, height fields consistent, balance within
   bounds. Frames that settle an operation must satisfy all of them; frames in the
