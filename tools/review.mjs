@@ -47,6 +47,59 @@ const BUTTON_AUDIT = `(() => {
   return { total: document.querySelectorAll('button').length, native: out };
 })()`;
 
+/* 交互契约：页面上"增、删、查"真的能用吗？
+ *
+ * 算法层由 tools/check.mjs 的随机对拍守着，但"按钮接错了函数""改了树没改画面"
+ * 这类问题只在浏览器里才看得见。所以这里真的按一遍：插入 → 查找 → 重复插入 →
+ * 删除 → 删不存在的键 → 重置，每一步都要求树里真的变了、帧也真的接上了。 */
+const INTERACTION = dbg => `(() => {
+  const D = window[${JSON.stringify(dbg)}];
+  if (!D || typeof D.run !== 'function') return { skipped: true, bad: [] };
+  const bad = [];
+  const push = (what, detail) => bad.push({ what, detail });
+  const before = D.state();
+
+  /* 插入一个树里一定没有的键 */
+  let k = 1;
+  while (D.keys().includes(k)) k++;
+  let r = D.run('insert', k);
+  if (!r) push('插入没有产生帧', 'run("insert") 返回空');
+  else {
+    if (!D.keys().includes(k)) push('插入之后树里没有这个键', '插入 ' + k);
+    if (D.state().frames <= before.frames) push('插入没有把帧接到轨迹上', before.frames + ' → ' + D.state().frames);
+    if (D.state().ops !== before.ops + 1) push('操作数没有增加', before.ops + ' → ' + D.state().ops);
+  }
+
+  /* 查找刚插入的键：必须报"找到" */
+  r = D.run('search', k);
+  if (!r || r.ok !== true) push('查找刚插入的键却报告没找到', 'search(' + k + ')');
+
+  /* 重复插入：识别为已存在，且不能出现两个相同键 */
+  const dup = D.run('insert', k);
+  if (!dup || dup.ok !== true) push('重复插入的报告不对', 'insert(' + k + ')');
+  if (D.keys().filter(x => x === k).length !== 1) push('重复插入产生了两个相同键', D.keys().join(','));
+
+  /* 删除：键必须真的消失 */
+  r = D.run('remove', k);
+  if (!r || r.ok !== true) push('删除已存在的键却失败', 'remove(' + k + ')');
+  if (D.keys().includes(k)) push('删除之后键还在', '删除 ' + k);
+
+  /* 删一个不存在的键：报告没找到，且树不变 */
+  let missing = 1000;
+  while (D.keys().includes(missing)) missing++;
+  const snapshot = D.keys().join(',');
+  r = D.run('remove', missing);
+  if (!r || r.ok !== false) push('删除不存在的键却报告成功', 'remove(' + missing + ')');
+  if (D.keys().join(',') !== snapshot) push('删除不存在的键却改了树', snapshot + ' → ' + D.keys().join(','));
+
+  /* 重置：回到初始树 */
+  D.reset();
+  if (D.state().ops !== 0) push('重置之后操作记录没有清空', 'ops=' + D.state().ops);
+  if (D.state().frames !== 1) push('重置之后轨迹不是一帧', 'frames=' + D.state().frames);
+
+  return { skipped: false, bad };
+})()`;
+
 /* 算法驱动页的逐帧 DOM 对照。页面通过 topic.debug 暴露调试口。 */
 const frameParity = (debugName) => `(() => {
   const D = window[${JSON.stringify(debugName)}];
@@ -134,11 +187,22 @@ async function main() {
       }
     }
 
-    /* 3. 按钮审计 */
+    /* 3. 交互契约（能操作的页面） */
+    let interact = '—';
+    if (page.topic && page.topic.debug) {
+      const r = await evaluate(INTERACTION(page.topic.debug));
+      if (r.skipped) interact = '跳过（页面没有交互口）';
+      else {
+        r.bad.forEach(b => fail(page.id, '交互失灵', `${b.what} — ${b.detail}`));
+        interact = r.bad.length ? `✗ ${r.bad.length} 处` : '增删查重置 ✓';
+      }
+    }
+
+    /* 4. 按钮审计 */
     const btns = await evaluate(BUTTON_AUDIT);
     btns.native.forEach(b => fail(page.id, '按钮仍是系统默认样式', `.${b.cls} "${b.text}"`));
 
-    /* 4. 移动端溢出 */
+    /* 5. 移动端溢出 */
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await sleep(700);
     const mob = await evaluate(`(() => {
@@ -147,7 +211,7 @@ async function main() {
     })()`);
     if (mob.over > 1) fail(page.id, '移动端横向溢出', mob.over + 'px');
 
-    /* 5. 截图 */
+    /* 6. 截图 */
     if (WANT_SHOTS) {
       await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 940, deviceScaleFactor: 1, mobile: false });
       await sleep(600);
@@ -155,7 +219,7 @@ async function main() {
       fs.writeFileSync(path.join(ARTIFACTS, page.id + '.png'), Buffer.from(shot.data, 'base64'));
     }
 
-    console.log(`  ${page.id.padEnd(7)} 错误 ${String(errs.length).padStart(2)} · 按钮 ${String(btns.total).padStart(2)}（默认样式 ${btns.native.length}）· 移动端溢出 ${mob.over}px · 逐帧对照 ${parity}`);
+    console.log(`  ${page.id.padEnd(7)} 错误 ${String(errs.length).padStart(2)} · 按钮 ${String(btns.total).padStart(2)}（默认样式 ${btns.native.length}）· 移动端溢出 ${mob.over}px · 逐帧 ${parity} · 交互 ${interact}`);
   }
 
   ws.close(); chrome.kill();

@@ -63,25 +63,7 @@
                 `${key} is appended at index ${i}: the shape stays complete but heap order may be broken`, node.id,
                 `末尾追加 ${key}`, `append ${key} at the end`);
 
-      /* 上浮：只要比父小就换上去 */
-      let cur = i;
-      while (cur > 0) {
-        const p = this._parent(cur);
-        this._log(`比较 ${this.items[cur].key} 与父节点 ${this.items[p].key}（下标 ${p}）`,
-                  `Compare ${this.items[cur].key} with its parent ${this.items[p].key} (index ${p})`, this.items[cur].id,
-                  `与父节点比较`, `compare with the parent`);
-        if (this.items[cur].key >= this.items[p].key) {
-          this._log(`${this.items[cur].key} 不小于父节点，堆序已经满足，上浮停止`,
-                    `${this.items[cur].key} is not smaller than its parent; heap order holds, stop`, this.items[cur].id,
-                    `父更小，停止上浮`, `parent is smaller, stop`);
-          break;
-        }
-        this._swap(cur, p);
-        this._log(`${this.items[p].key} 与父节点交换：${this.items[p].key} 上浮到下标 ${p}`,
-                  `Swap: ${this.items[p].key} sifts up to index ${p}`, this.items[p].id,
-                  `交换，继续上浮`, `swap, keep sifting up`);
-        cur = p;
-      }
+      this._siftUpFrom(i);
       this.mark(`${key} 插入完成：堆顶是 ${this.items[0].key}，共 ${this.items.length} 个元素`,
                 `${key} inserted: the root is ${this.items[0].key}, size ${this.items.length}`);
     }
@@ -123,8 +105,40 @@
                 `Move the last element ${last.key} to the root: the shape stays complete but heap order is broken`, last.id,
                 `末尾 ${last.key} 补到堆顶`, `last element ${last.key} moves to the root`);
 
+      this._siftDown(0);
+
+      this.mark(`删除完成：输出 ${top.key}，堆顶现在是 ${this.items[0].key}，共 ${this.items.length} 个元素`,
+                `Removed: output ${top.key}; the root is now ${this.items[0].key}, size ${this.items.length}`);
+      return top.key;
+    }
+
+    /* 上浮：只要比父小就换上去。插入用它，"删除任意元素"补位后也可能用它 */
+    _siftUpFrom(i) {
+      let cur = i;
+      while (cur > 0) {
+        const p = this._parent(cur);
+        this._log(`比较 ${this.items[cur].key} 与父节点 ${this.items[p].key}（下标 ${p}）`,
+                  `Compare ${this.items[cur].key} with its parent ${this.items[p].key} (index ${p})`, this.items[cur].id,
+                  `与父节点比较`, `compare with the parent`);
+        if (this.items[cur].key >= this.items[p].key) {
+          this._log(`${this.items[cur].key} 不小于父节点，堆序已经满足，上浮停止`,
+                    `${this.items[cur].key} is not smaller than its parent; heap order holds, stop`, this.items[cur].id,
+                    `父更小，停止上浮`, `parent is smaller, stop`);
+          break;
+        }
+        this._swap(cur, p);
+        this._log(`${this.items[p].key} 与父节点交换：${this.items[p].key} 上浮到下标 ${p}`,
+                  `Swap: ${this.items[p].key} sifts up to index ${p}`, this.items[p].id,
+                  `交换，继续上浮`, `swap, keep sifting up`);
+        cur = p;
+      }
+      return cur;
+    }
+
+    /* 下沉：每次和"更小的那个孩子"换。pop 用它，"删除任意元素"补位后也用它 */
+    _siftDown(start) {
       /* 下沉：每次和"更小的那个孩子"换 */
-      let cur = 0;
+      let cur = start;
       const n = this.items.length;
       while (true) {
         const l = 2 * cur + 1, r = 2 * cur + 2;
@@ -153,9 +167,15 @@
                   `与更小的孩子交换`, `swap with the smaller child`);
         cur = small;
       }
-      this.mark(`删除完成：输出 ${top.key}，堆顶现在是 ${this.items[0].key}，共 ${this.items.length} 个元素`,
-                `Removed: output ${top.key}; the root is now ${this.items[0].key}, size ${this.items.length}`);
-      return top.key;
+    }
+
+    /* 从任意下标恢复堆序：删掉中间某个元素后，补上来的那个可能比父小（要上浮），
+     * 也可能比孩子大（要下沉）。两种都试一遍，堆序一定回来。 */
+    reheapify(i) {
+      if (i < 0 || i >= this.items.length) return;
+      const p = this._parent(i);
+      if (i > 0 && this.items[i].key < this.items[p].key) this._siftUpFrom(i);
+      else this._siftDown(i);
     }
 
     /* 建堆：从最后一个非叶节点往前逐个下沉（教材里的 O(n) 建堆） */
@@ -220,8 +240,72 @@
     return heap;
   }
 
+  const Base = (typeof require === 'function')
+    ? require('../shared/tree-session.js').TreeSession
+    : global.SlowMoTreeSession.TreeSession;
+
+  /* 会话：堆是数组，所以查找是"扫一遍"（O(n)），删除是"按值删"（O(n)）。
+   * 删除的做法：先把它和末尾元素对调，再把末尾弹掉，最后从那个位置下沉。
+   * 只有"下沉结束"之后才记一帧 —— 中间态会让堆序短暂崩掉，不该画给读者看。 */
+  class HeapSession extends Base {
+    constructor(seed) { super({ tree: () => new MinHeap(), seed: seed || SEED }); }
+    keys() { return this.tree.items.map(it => it.key); }
+    has(key) { return this.tree.items.some(it => it.key === key); }
+    height() { return Math.floor(Math.log2(this.tree.items.length + 1)); }
+    /* 数组视图用的格子：名字是节点 id（身份），下标会随上浮/下沉变化 */
+    arrayItems() { return this.tree.arrayItems(); }
+
+    /* 堆的"查找"是逐格比较，不是走路径 */
+    search(key) {
+      this.tree.entries.length = 0;
+      this.tree.mark(`查找 ${key}：堆只能逐个比较，没有可走的路径`, `Search ${key}: a heap has no search path, only a scan`);
+      const i = this.tree.items.findIndex(it => it.key === key);
+      if (i >= 0) {
+        const node = this.tree.root() && this.tree.items[i];
+        this.tree._log(`${key} 在下标 ${i}（比较了 ${i + 1} 格）`, `${key} sits at index ${i} (${i + 1} cells compared)`,
+                       node ? node.id : null, `扫到了`, `found by scanning`);
+        this.tree.mark(`${key} 在堆里`, `${key} is in the heap`);
+        return this._done('search', key, true);
+      }
+      this.tree.mark(`${key} 不在堆里`, `${key} is not in the heap`);
+      return this._done('search-miss', key, false);
+    }
+
+    /* 按值删除：与末尾对调，弹出末尾，再下沉 */
+    remove(key) {
+      const items = this.tree.items;
+      this.tree.entries.length = 0;
+      this.tree.mark(`删除 ${key}：先扫一遍找到它的下标`, `Delete ${key}: scan for its index first`);
+      const i = items.findIndex(it => it.key === key);
+      if (i < 0) {
+        this.tree.mark(`${key} 不在堆里，没有可删的东西`, `${key} is not in the heap, nothing to delete`);
+        return this._done('delete-miss', key, false);
+      }
+      const last = items.length - 1, lastKey = items[last].key;
+      if (i !== last) {
+        this.tree._swap(i, last);
+        this.tree.items.pop();
+        this.tree.items.forEach((it, k) => { it.index = k; });
+        /* 只有"恢复堆序之后"才记帧：中间态是故意坏的，不该画给读者看 */
+        this.tree._log(`把末尾的 ${lastKey} 换到下标 ${i} 并弹掉，再从那里恢复堆序`,
+                       `The last element ${lastKey} takes index ${i} and the end is popped; heap order is restored from there`,
+                       items.length ? items[Math.min(i, items.length - 1)].id : null,
+                       `与末尾对调后恢复堆序`, `swap with the end, then restore heap order`);
+        this.tree.reheapify(i);
+      } else {
+        this.tree.items.pop();
+        this.tree.items.forEach((it, k) => { it.index = k; });
+        this.tree._log(`${key} 就在末尾，直接弹掉，形状与堆序都还是好的`,
+                       `${key} is the last cell; pop it directly, shape and order both survive`, null,
+                       `末尾元素，直接弹掉`, `last cell: just pop it`);
+      }
+      this.tree.mark(`${key} 删除完成：共 ${this.tree.items.length} 个元素`, `${key} removed: size ${this.tree.items.length}`);
+      return this._done('delete', key, true);
+    }
+  }
+
   const API = {
-    MinHeap, HeapNode, SEED, INSERT_KEYS,
+    MinHeap, HeapNode, SEED, INSERT_KEYS, Session: HeapSession,
     ops: { insert: opInsert, peek: opPeek, pop: opPop }
   };
   global.HeapTree = API;

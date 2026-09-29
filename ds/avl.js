@@ -188,11 +188,16 @@
           return only;
         }
         const s = minNode(node.right);
+        /* 顺序很重要：先从右子树里摘掉后继，再把键复制上来。
+         * 反过来写会让树里短暂出现两个相同键，那一帧就违反了"左小右大"。 */
         this._log(`${key} 有两个孩子：右子树最小键 ${s.key} 是中序后继，用它顶替`,
                   `${key} has two children: the inorder successor is ${s.key}, the minimum of the right subtree`, s.id,
                   `两个孩子：找中序后继顶替`, `two children: promote the inorder successor`);
-        node.key = s.key;
         node.right = this.remove(node.right, s.key);
+        node.key = s.key;
+        this._log(`${s.key} 已经从中序后继的位置摘下来，现在覆盖到原节点上`,
+                  `${s.key} is unlinked from its old place and now overwrites the node`, node.id,
+                  `后继摘下来了，覆盖原节点`, `successor unlinked; overwrite the node`);
       }
       node.height = 1 + Math.max(h(node.left), h(node.right));
       this._log(`回溯到 ${node.key}：重算高度 h=${node.height}，bf=${fmt(node.bf)}`,
@@ -249,7 +254,19 @@
     return tree;
   }
 
-  const API = { AVL, AVLNode, SEED, ops: { insert: opInsert, search: opSearch, delete: opDelete } };
+  const Base = (typeof require === 'function')
+    ? require('../shared/tree-session.js').TreeSession
+    : global.SlowMoTreeSession.TreeSession;
+
+  /* 会话：一棵"活着"的 AVL —— 用户连着插入/删除，树会自己重新平衡 */
+  class AVLSession extends Base {
+    constructor(seed) { super({ tree: () => new AVL(), seed: seed || SEED }); }
+    keys() { const out = []; (function w(n) { if (!n) return; w(n.left); out.push(n.key); w(n.right); })(this.tree.rootNode); return out; }
+    has(key) { let n = this.tree.rootNode; while (n) { if (key === n.key) return true; n = key < n.key ? n.left : n.right; } return false; }
+    height() { return h(this.tree.rootNode); }
+  }
+
+  const API = { AVL, AVLNode, SEED, Session: AVLSession, ops: { insert: opInsert, search: opSearch, delete: opDelete } };
   global.AVLTree = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof window !== 'undefined' ? window : globalThis);

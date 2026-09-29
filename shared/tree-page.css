@@ -1,0 +1,125 @@
+/*!
+ * 可操作的树页 —— 页面级共用零件（样式）
+ *
+ * 六个树页（BST / AVL / 红黑树 / 堆 / 二叉树 / B 树…）的版式是同一套：
+ * 左边画布 + 时间线，右边解说 + 复杂度表，底部游标。
+ * 差别只有左右栏比例，所以那些留在各页的 <style> 里。
+ * 页面骨架在 shared/tree-page.tpl.html，交互胶水在 shared/tree-page.js。
+ */
+.wrap{
+  flex:1;display:grid;grid-template-columns:minmax(420px,1.2fr) minmax(360px,1fr);
+  grid-template-rows:minmax(0,1fr);min-height:0;overflow:hidden;
+}
+.left{padding:26px clamp(18px,4vw,54px) 0;display:flex;flex-direction:column;min-width:0;min-height:0}
+.right{
+  border-left:1px solid var(--rule);background:var(--paper-2);
+  display:flex;flex-direction:column;min-width:0;overflow:auto;
+}
+.chips{
+  display:flex;gap:2px;flex-wrap:wrap;padding:16px clamp(18px,3vw,30px) 14px;
+  border-bottom:1px solid var(--rule-soft);max-height:132px;overflow:auto;
+}
+.step{
+  background:none;border:0;cursor:pointer;padding:3px 6px;
+  font:400 12px var(--sans);color:var(--faint);
+  border-bottom:1px solid transparent;transition:.15s;
+}
+.step:hover{color:var(--ink)}
+.step.done{color:var(--muted)}
+.step.on{color:var(--accent);border-bottom-color:var(--accent)}
+.scene{padding:22px clamp(18px,3vw,30px) 24px}
+.scene h2{margin:0;font-weight:400;font-size:27px;line-height:1.25;letter-spacing:-.005em}
+.act{margin:12px 0 0;font-size:15.5px;line-height:1.7;color:var(--ink-2);
+  padding-left:14px;border-left:2px solid var(--rule)}
+#sceneText{margin:12px 0 0;font-size:14px;color:var(--muted);font-style:italic}
+#sceneText b{color:var(--danger);font-style:normal;font-weight:600}
+.metrics{display:flex;gap:18px;flex-wrap:wrap;margin-top:18px;
+  border-top:1px solid var(--rule-soft);padding-top:12px}
+.metric{font:400 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.metric::before{content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+  background:var(--rule);margin-right:7px;vertical-align:2px}
+.metric.warn{color:var(--danger)}
+.metric.warn::before{background:var(--danger)}
+table.cx{margin-top:auto;border-top:1px solid var(--rule)}
+.note{margin:0;padding:16px clamp(18px,3vw,30px) 26px;font-size:12.5px;font-style:italic;
+  color:var(--faint);line-height:1.7;border-top:1px solid var(--rule)}
+.tagline{font:400 10.5px var(--sans);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:10px}
+
+/* 操作提示：一行说明"这一页怎么用" */
+.hint{margin:0;padding:0 0 10px;font:400 11.5px var(--sans);color:var(--faint);line-height:1.6}
+
+/* 时间线：一行一次操作，行内是它的帧 */
+.timeline{
+  display:flex;flex-direction:column;gap:3px;overflow:auto;max-height:126px;
+  border-top:1px solid var(--rule);padding:8px 0 10px;background:var(--paper-2);
+  margin:0 calc(clamp(18px,4vw,54px) * -1);padding-left:clamp(18px,4vw,54px);
+  padding-right:clamp(18px,4vw,54px);
+}
+.tl-op{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
+.tl-head{
+  flex:0 0 auto;background:none;border:0;cursor:pointer;padding:3px 7px;margin-right:4px;
+  font:400 11.5px var(--sans);color:var(--muted);letter-spacing:.02em;
+  border-left:2px solid var(--rule);white-space:nowrap;transition:.15s;
+}
+.tl-head:hover{color:var(--ink)}
+.tl-head.on{color:var(--accent);border-left-color:var(--accent)}
+.tl-head.miss{color:var(--faint)}
+.tl-frame{
+  flex:0 0 auto;background:none;border:0;cursor:pointer;padding:2px 6px;min-width:22px;
+  font:400 11px var(--sans);color:var(--faint);border-bottom:1px solid transparent;transition:.15s;
+}
+.tl-frame:hover{color:var(--ink)}
+.tl-frame.done{color:var(--muted)}
+.tl-frame.on{color:var(--accent);border-bottom-color:var(--accent)}
+.tl-op.live .tl-frame{color:var(--ink-2)}
+.tl-idle{font:400 11.5px var(--sans);color:var(--faint);font-style:italic}
+
+/* 操作区：输入键 + 动作按钮 + 模式切换 */
+/* 窄屏时操作条要能换行，否则会横着溢出（移动端检查会抓到） */
+.opbar{flex-wrap:wrap;row-gap:8px}
+.op-box{display:flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.op-meta{font:400 11px var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.op-meta b{color:var(--ink);font-weight:600;font-style:normal}
+.op-input{
+  width:86px;background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+  padding:4px 7px;font:400 13px var(--serif);color:var(--ink);transition:border-color .15s;
+}
+.op-input:focus{outline:none;border-color:var(--accent)}
+.op-input.bad{border-color:var(--danger)}
+.op-run{
+  background:none;border:1px solid var(--rule);border-radius:2px;cursor:pointer;
+  padding:4px 10px;font:400 12px var(--sans);color:var(--ink-2);transition:.15s;
+}
+.op-run:hover{border-color:var(--accent);color:var(--accent)}
+.op-run.primary{border-color:var(--ink);color:var(--ink)}
+.op-run.primary:hover{background:var(--ink);color:var(--paper)}
+.op-run.on{border-color:var(--accent);color:var(--accent)}
+.op-sep{width:1px;height:16px;background:var(--rule);margin:0 4px}
+.op-mode{
+  background:none;border:1px solid transparent;border-radius:2px;cursor:pointer;
+  padding:4px 8px;font:400 11.5px var(--sans);color:var(--muted);transition:.15s;
+}
+.op-mode:hover{color:var(--ink)}
+.op-mode.on{border-color:var(--rule);color:var(--ink);background:var(--paper)}
+
+/* 堆的数组视图与树视图共用左栏 */
+.views{display:flex;gap:16px;align-items:baseline;padding:0 0 8px}
+.view-tab{
+  background:none;border:0;cursor:pointer;padding:2px 0 3px;font:400 11.5px var(--sans);
+  letter-spacing:.12em;text-transform:uppercase;color:var(--faint);
+  border-bottom:1px solid transparent;transition:.15s;
+}
+.view-tab:hover{color:var(--ink)}
+.view-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+[hidden]{display:none !important}
+
+@media(max-width:720px){
+  .op-box{margin-left:0;justify-content:flex-start}
+  .hint{font-size:11px}
+}
+@media(max-width:1000px){
+  .wrap{grid-template-columns:1fr;grid-template-rows:auto auto;overflow:auto}
+  .right{border-left:0;border-top:1px solid var(--rule)}
+  .left{min-height:360px}
+}

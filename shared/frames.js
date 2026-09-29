@@ -163,7 +163,7 @@
   /* 帧间差异必须"一步能解释"：一次旋转最多动 4 个节点的父子关系 */
   function diffFrames(prev, next, opts) {
     /* 一次双旋最多动 4 个节点的父子关系；堆的一次下沉是"父 + 两个孩子"= 5 */
-    const P = Object.assign({ maxChanges: 5 }, opts || {});
+    const P = Object.assign({ maxChanges: 5, bulkDelete: false }, opts || {});
     const a = new Map((prev || []).map(n => [n.id, n]));
     const b = new Map((next || []).map(n => [n.id, n]));
     const added = [...b.keys()].filter(k => !a.has(k));
@@ -172,9 +172,11 @@
     const rekeyed = [...b.keys()].filter(k => a.has(k) && a.get(k).key !== b.get(k).key);
     const problems = [];
     if (added.length > 1) problems.push({ what: '一步新增了多个节点', detail: added.join(',') });
-    if (removed.length > 1) problems.push({ what: '一步删除了多个节点', detail: removed.join(',') });
+    /* bulkDelete：这一页的删除语义就是"整棵子树摘掉"（文件系统删目录），
+     * 所以一步少掉多个节点是意料之中，不是失控。 */
+    if (removed.length > 1 && !P.bulkDelete) problems.push({ what: '一步删除了多个节点', detail: removed.join(',') });
     const changes = added.length + removed.length + reparented.length + rekeyed.length;
-    if (changes > P.maxChanges) {
+    if (changes > P.maxChanges && !P.bulkDelete) {
       problems.push({ what: '一步内结构变化过多', detail: `+${added.length} -${removed.length} 换父${reparented.length} 换键${rekeyed.length}` });
     }
     return { problems, added, removed, reparented, rekeyed, changes };

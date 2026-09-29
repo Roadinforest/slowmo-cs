@@ -59,11 +59,19 @@ slowmo-cs/
 │   ├── avl.html / avl.js       # one topic: main() only + the real algorithm
 │   ├── rbt.html / rbt.js       # red-black tree, double-black repair included
 │   ├── heap.html / heap.js     # min-heap, array view and tree view in step
+│   ├── bst.html / bst.js       # every key you type runs the real algorithm
+│   ├── general.html / general.js  # n-ary file tree, text keys
+│   ├── binary.html / binary.js # level-order array reading
+│   ├── btree.html / btree.js   # B-tree and B+ tree, split/borrow/merge
 │   ├── trees.html              # the older, hand-drawn tree tour
 │   └── trees.data.js
 ├── shared/
 │   ├── classic.css         # the whole design system (tokens + every component)
 │   ├── stepper.js          # the step engine
+│   ├── tree-session.js     # a live tree + the frames each operation produced
+│   ├── session-ui.js       # operation bar and the per-operation timeline
+│   ├── tree-page.js/.css   # the shared page skeleton for the operable tree pages
+│   ├── tree-state.js       # snapshot -> view state (focus, path, rotated, ...)
 │   ├── trace.js            # the recorder: line numbers, snapshots, narration
 │   ├── steps.js            # the step contract (shape of one frame)
 │   ├── frames.js           # structural invariants (one root, no cycles, heap/RB rules)
@@ -72,8 +80,9 @@ slowmo-cs/
 │   ├── trees-render.js     # hand-drawn diagrams: layout + SVG (browser AND node)
 │   └── algo-ui.js          # step chips, tables
 └── tools/
-    ├── check.mjs           # content + structure + gallery, no browser needed
-    ├── review.mjs          # browser: errors, frame parity, buttons, mobile
+    ├── check.mjs           # content + structure + gallery + randomized sessions
+    ├── review.mjs          # browser: errors, frame parity, interaction, buttons, mobile
+    ├── build-pages.mjs     # page config + template -> the six operable tree pages
     ├── trees-page.mjs      # hand-drawn page: data, scenes, and what actually renders
     └── topics.mjs          # the registry: where each topic's algorithm lives
 ```
@@ -93,7 +102,8 @@ months later. That layer caught two real defects the data checks could not see:
 B+ leaf-chain cells that never entered the layout at all, and two nodes landing
 on the same pixel in four diagrams.
 
-**Algorithm-driven** (`ds/avl.html`, `ds/rbt.html`, `ds/heap.html`) — you write the
+**Algorithm-driven, and directly operable** (`ds/bst.html`, `ds/avl.html`,
+`ds/rbt.html`, `ds/heap.html`, `ds/general.html`, `ds/binary.html`) — you write the
 algorithm as a subclass of `Trace` (`shared/trace.js`), it records its own run, and
 the page is just a `main`:
 
@@ -113,6 +123,32 @@ class MyTree extends Trace {
 no constant to drift), a bilingual narration, an optional one-line summary, the node
 being looked at, and a structural snapshot. Nothing is drawn by hand, and node identity
 is a stable `id` — `key` is just data the node carries.
+
+### Using the tree, not just watching it
+
+These six pages share one interaction layer, so each page only supplies a config:
+
+```
+shared/tree-session.js   a live tree: insert / search / remove / reset, and the
+                         frames each operation produced (id counter never resets
+                         inside a session, or the view would reuse the wrong DOM)
+shared/session-ui.js     operation bar + timeline: every operation gets a row,
+                         and every frame in it is clickable
+shared/tree-page.js      mounts the view, wires the stepper, renders each frame,
+                         and derives highlights from the snapshot
+shared/tree-page.css     the shared layout (canvas + timeline on the left, the
+                         narration on the right)
+shared/tree-page.tpl.html  the page skeleton
+tools/build-pages.mjs    page config (ds/<id>.page.js) + template → ds/<id>.html
+```
+
+Type a key and press Enter: an existing key is searched, a new one is inserted.
+Switch to Delete and click a key to remove it. `node tools/build-pages.mjs --check`
+fails if a generated page has drifted from the template or its config, and
+`node tools/check.mjs` runs 12 × 16 random insert/search/delete operations per
+topic against a `Set` model, checking every frame's structural invariants and the
+resulting key set — that is what makes "the user can type anything" a claim with
+machine backing instead of a hope.
 
 ## Adding a topic
 
@@ -134,10 +170,12 @@ Two rules keep it honest:
 2. **Steps are data.** Keep them in `topic.data.js`, out of the rendering file.
    That file doubles as the thing people read to learn the topic.
 
-Copy `os/io-models.html` and start hacking. For a real algorithm, copy `ds/avl.js`
-+ `ds/avl.html` instead: implement the structure, push one record per step
-(`line`, `text`, `act`, `focus`, `nodes`), and let `shared/treeview.js` do the
-drawing.
+Copy `os/io-models.html` and start hacking. For a real algorithm, write
+`ds/<topic>.js` (the structure + a `Session`) plus `ds/<topic>.page.js` (the page
+config) and add one entry to `tools/build-pages.mjs` and one to `tools/topics.mjs`.
+`tools/check.mjs` then verifies the step contract, the structural invariants, the
+frame-to-frame diff budget, the recorded line numbers, and a randomized operation
+session against an independent model.
 
 ## Quality gates
 

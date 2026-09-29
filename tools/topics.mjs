@@ -16,6 +16,63 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 
 export const TOPICS = [
   {
+    id: 'general',
+    debug: 'GENERAL_DEBUG',
+    name: { zh: '普通树 / 多叉树', en: 'General / n-ary tree' },
+    page: 'ds/general.html',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/general.js')) }),
+    sourceFile: 'ds/general.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '在根下插入「图片」', run: () => algo.ops.insert('图片', '项目') },
+      { key: 'search', zh: '查找「测试」', run: () => algo.ops.search('测试') },
+      { key: 'delete', zh: '删除「文档」（整棵子树）', run: () => algo.ops.delete('文档') }
+    ],
+    members: ['insert', 'find', 'remove'],
+    /* 多叉、无序：只查单根无环。删除语义是"整棵子树摘掉"，所以允许一步少多个节点 */
+    policy: { maxChildren: 64, bulkDelete: true },
+    session: (algo) => new algo.Session(),
+    /* 这一页的键是名字，随机对拍要按名字造键 */
+    keyKind: 'text'
+  },
+
+  {
+    id: 'binary',
+    debug: 'BINTREE_DEBUG',
+    name: { zh: '二叉树', en: 'Binary tree' },
+    page: 'ds/binary.html',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/binary.js')) }),
+    sourceFile: 'ds/binary.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '层序插入 8 9', run: () => algo.ops.insert([8, 9]) },
+      { key: 'search', zh: '查找 5', run: () => algo.ops.search(5) },
+      { key: 'delete', zh: '删除叶子 7', run: () => algo.ops.delete(7) }
+    ],
+    members: ['insert', 'find', 'remove'],
+    policy: { maxChildren: 2 },
+    session: (algo) => new algo.Session()
+  },
+
+  {
+    id: 'bst',
+    /* 页面暴露的调试口：审阅工具用它逐帧对照 DOM 与算法状态 */
+    debug: 'BST_DEBUG',
+    name: { zh: '二叉搜索树', en: 'BST' },
+    page: 'ds/bst.html',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/bst.js')) }),
+    sourceFile: 'ds/bst.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '依次插入 50 30 70 20 40 45', run: () => algo.ops.insert(algo.DEMO_INSERT) },
+      { key: 'search', zh: '查找 40', run: () => algo.ops.search(algo.DEMO_SEARCH) },
+      { key: 'delete', zh: '删除有两个孩子的节点 50', run: () => algo.ops.delete(algo.DEMO_DELETE) }
+    ],
+    members: ['insert', 'find', 'remove'],
+    /* 有序二叉，不维护高度字段 */
+    policy: { maxChildren: 2, ordered: true },
+    /* 交互会话：随机操作序列的对拍检查（结构 + 键集合都要对） */
+    session: (algo) => new algo.Session()
+  },
+
+  {
     id: 'avl',
     /* 页面暴露的调试口：审阅工具用它逐帧对照 DOM 与算法状态 */
     debug: 'AVL_DEBUG',
@@ -34,7 +91,8 @@ export const TOPICS = [
     /* 这一页每个操作聚焦哪几个方法（源码行号契约按它校验） */
     members: ['rotateRight', 'rotateLeft', 'rebalance', 'insert', 'find', 'remove'],
     /* 结构特有策略：AVL 是严格平衡的 BST，节点自带 height */
-    policy: { maxChildren: 2, ordered: true, heightField: true, balanced: 1 }
+    policy: { maxChildren: 2, ordered: true, heightField: true, balanced: 1 },
+    session: (algo) => new algo.Session()
   },
 
   {
@@ -50,7 +108,8 @@ export const TOPICS = [
       { key: 'delete', zh: '删除 3（触发双黑修复）', run: () => algo.ops.delete() }
     ],
     /* 红黑树：有序二叉 + 根黑 / 无红红 / 黑高相等。它不维护高度字段，也不要求 |bf|<=1 */
-    policy: { maxChildren: 2, ordered: true, redBlack: true }
+    policy: { maxChildren: 2, ordered: true, redBlack: true },
+    session: (algo) => new algo.Session()
   },
 
   {
@@ -66,7 +125,8 @@ export const TOPICS = [
       { key: 'pop', zh: '删除最小值', run: () => algo.ops.pop() }
     ],
     /* 堆只保证"父不大于孩子"，左右之间没有顺序；也没有 height 字段 */
-    policy: { maxChildren: 2, ordered: false, minHeap: true }
+    policy: { maxChildren: 2, ordered: false, minHeap: true },
+    session: (algo) => new algo.Session()
   },
 
   /* --------------------------------------------------------------------

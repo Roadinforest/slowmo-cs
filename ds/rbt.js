@@ -394,8 +394,20 @@
     return tree;
   }
 
+  const Base = (typeof require === 'function')
+    ? require('../shared/tree-session.js').TreeSession
+    : global.SlowMoTreeSession.TreeSession;
+
+  /* 会话：一棵"活着"的红黑树。insert/remove 自己维护根，所以基类走单参数那条分支。 */
+  class RBSession extends Base {
+    constructor(seed) { super({ tree: () => new RBTree(), seed: seed || SEED }); }
+    keys() { const out = []; (function w(n) { if (!n) return; w(n.left); out.push(n.key); w(n.right); })(this.tree.rootNode); return out; }
+    has(key) { let n = this.tree.rootNode; while (n) { if (key === n.key) return true; n = key < n.key ? n.left : n.right; } return false; }
+    height() { const h = n => (n ? 1 + Math.max(h(n.left), h(n.right)) : 0); return h(this.tree.rootNode); }
+  }
+
   const API = {
-    RBTree, RBNode, RED, BLACK, SEED, INSERT_KEYS, SEARCH_KEY, DELETE_KEY,
+    RBTree, RBNode, RED, BLACK, SEED, INSERT_KEYS, SEARCH_KEY, DELETE_KEY, Session: RBSession,
     ops: { insert: opInsert, search: opSearch, delete: opDelete }
   };
   global.RBTree = API;
