@@ -1,0 +1,40 @@
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 内容与结构：零依赖，不需要浏览器
+      - name: 内容检查（契约 / 不变量 / 帧间差异 / 源码行号 / 展厅一致性）
+        run: node tools/check.mjs
+
+      # 页面侧：抓运行时错误、逐帧 DOM 对照、按钮样式、移动端溢出
+      - name: 安装 Chrome
+        uses: browser-actions/setup-chrome@v1
+        id: chrome
+
+      - name: 浏览器审阅
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: node tools/review.mjs --shots
+
+      - name: 上传截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -58,15 +58,21 @@ slowmo-cs/
 ├── ds/
 │   ├── avl.html            # one topic: main() only — registers ops, binds the trace
 │   ├── avl.js              # the real AVL algorithm + its trace recorder
-│   ├── avl.code.js         # generated: the class source for the code panel
+│   ├── avl.source.js       # node-only: reads the class source, audits line numbers
 │   ├── trees.html          # the older, hand-drawn tree tour
 │   └── trees.data.js
-└── shared/
-    ├── classic.css         # the whole design system (tokens + every component)
-    ├── stepper.js          # the step engine
-    ├── treeview.js         # algorithm state -> persistent DOM binding
-    ├── treeview.css        # the tree's states (colors come from classic.css)
-    └── algo-ui.js          # code panel, step chips, tables
+├── shared/
+│   ├── classic.css         # the whole design system (tokens + every component)
+│   ├── stepper.js          # the step engine
+│   ├── steps.js            # the step contract (shape of one frame)
+│   ├── frames.js           # structural invariants (one root, no cycles, ordered...)
+│   ├── treeview.js         # algorithm state -> persistent DOM binding
+│   ├── treeview.css        # the tree's states (colors come from classic.css)
+│   └── algo-ui.js          # step chips, tables
+└── tools/
+    ├── check.mjs           # content + structure + gallery, no browser needed
+    ├── review.mjs          # browser: errors, frame parity, buttons, mobile
+    └── topics.mjs          # the registry: where each topic's algorithm lives
 ```
 
 `stepper.js` only handles *time* — the cursor, autoplay, the progress bar, the
@@ -114,6 +120,34 @@ Copy `os/io-models.html` and start hacking. For a real algorithm, copy `ds/avl.j
 + `ds/avl.html` instead: implement the structure, push one record per step
 (`line`, `text`, `act`, `focus`, `nodes`), and let `shared/treeview.js` do the
 drawing.
+
+## Quality gates
+
+Two commands, no dependencies, no `npm install`:
+
+```bash
+node tools/check.mjs      # 内容契约 / 结构不变量 / 帧间差异 / 源码行号 / 展厅一致性
+node tools/review.mjs     # 浏览器侧：运行时错误、逐帧 DOM 对照、按钮样式、移动端溢出
+```
+
+`check.mjs` is the definition of done for a topic. It enforces, among other things:
+
+- **the step contract** (`shared/steps.js`) — every frame carries a bilingual
+  `text`, a stable node `id` per node, and a `focus` that either exists in that
+  frame or is declared with `pendingKey`
+- **structural invariants** (`shared/frames.js`) — one root, no cycles, parent
+  pointers reachable, children ordered, height fields consistent, balance within
+  bounds. Frames that settle an operation must satisfy all of them; frames in the
+  middle may show a not-yet-repaired imbalance
+- **explainable frame diffs** — one step may add/remove one node, or reparent at
+  most four (a double rotation)
+- **gallery honesty** — a card may not link to a missing page or claim a step
+  count the topic does not have
+
+Both run in CI (`.github/workflows/ci.yml`). They exist because every real bug in
+this project so far was invisible on screen and was caught by these checks, not by
+looking: a node aliased by key during delete, a `Set` comparing `1` to `"1"`, an
+edge cache keyed on a `\0` separator. Screen-reading does not scale; assertions do.
 
 ## License
 

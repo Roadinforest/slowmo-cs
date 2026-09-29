@@ -1,0 +1,145 @@
+/*!
+ * Slow-Mo CS — 结构不变量校验（Node 与浏览器共用）
+ *
+ * 通用规则对任何"有根树快照"都成立：
+ *   id 唯一 · 父指针可达 · 恰好一个根 · 无环
+ *
+ * 另有可选策略（结构特有，按需打开）：
+ *   maxChildren   每个节点最多几个孩子（二叉树 = 2）
+ *   ordered       true = 孩子按键有序（BST / AVL / 红黑树）
+ *   minHeap       true = 父不大于子（堆）
+ *   heightField   true = 节点自带 height 且与结构一致
+ *   balanced      允许的最大 |bf|（AVL = 1）
+ *   allowTransient 操作进行中：允许"已发现但尚未修复"的失衡与高度滞后
+ *
+ * 这就是把"画面等于算法状态"从默契变成机器判定。历史上抓到的四个 bug
+ * （成环、id 重复、焦点悬空、边堆积）全部由它这一类检查发现，肉眼看不出来。
+ */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (typeof window !== 'undefined') window.SlowMoFrames = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  const DEFAULT_POLICY = {
+    maxChildren: 2,
+    ordered: false,
+    minHeap: false,
+    heightField: false,
+    balanced: null,
+    allowTransient: false
+  };
+
+  /* 返回 { problems: [{what, detail}], info: {roots, maxDepth, size} } */
+  function inspect(nodes, opts) {
+    const P = Object.assign({}, DEFAULT_POLICY, opts || {});
+    const label = P.label || 'frame';
+    const problems = [];
+    const bad = (what, detail) => problems.push({ what, detail });
+    const list = Array.isArray(nodes) ? nodes : [];
+
+    /* --- 通用：身份与指针 --- */
+    const byId = new Map();
+    for (const n of list) {
+      if (!n || n.id == null) { bad('节点缺少 id', JSON.stringify(n)); continue; }
+      if (byId.has(n.id)) bad('id 重复', `id=${n.id}`);
+      byId.set(n.id, n);
+    }
+    for (const n of list) {
+      if (n.parent == null) continue;
+      if (!byId.has(n.parent)) bad('parent 指向不存在的节点', `node ${n.id}(key ${n.key}) -> parent ${n.parent}`);
+      if (n.parent === n.id) bad('parent 指向自己', `node ${n.id}`);
+    }
+
+    const roots = list.filter(n => n.parent == null || !byId.has(n.parent));
+    const realRoots = list.filter(n => n.parent == null);
+    if (list.length && realRoots.length !== 1) {
+      bad('根的数量不是 1', `${realRoots.length} 个（${realRoots.map(r => r.id).join(',')}）`);
+    }
+
+    /* --- 通用：无环 --- */
+    for (const n of list) {
+      let k = n.id, steps = 0;
+      while (k != null && steps <= list.length + 1) { const p = byId.get(k); k = p ? p.parent : null; steps++; }
+      if (steps > list.length + 1) { bad('父子链成环', `从 node ${n.id} 出发`); break; }
+    }
+
+    /* --- 孩子索引 --- */
+    const kids = new Map();
+    for (const n of list) {
+      if (n.parent == null || !byId.has(n.parent)) continue;
+      if (!kids.has(n.parent)) kids.set(n.parent, []);
+      kids.get(n.parent).push(n);
+    }
+
+    /* --- 结构策略 --- */
+    let maxDepth = 0;
+    const depthOf = new Map();
+    (function walk(id, d) {
+      if (depthOf.has(id)) return;
+      depthOf.set(id, d);
+      maxDepth = Math.max(maxDepth, d);
+      (kids.get(id) || []).forEach(c => walk(c.id, d + 1));
+    })(realRoots[0] ? realRoots[0].id : (roots[0] || {}).id, 0);
+
+    for (const n of list) {
+      const cs = kids.get(n.id) || [];
+      if (P.maxChildren != null && cs.length > P.maxChildren) {
+        bad(`孩子数超过 ${P.maxChildren}`, `node ${n.id} 有 ${cs.length} 个`);
+      }
+      const left = cs.filter(c => c.key < n.key);
+      const right = cs.filter(c => c.key > n.key);
+
+      if (P.ordered) {
+        if (left.length + right.length !== cs.length) {
+          bad('孩子键与父键相等或错序', `node ${n.id}(key ${n.key}) 孩子 ${cs.map(c => c.key).join(',')}`);
+        }
+        if (left.length > 1 || right.length > 1) bad('同侧多个孩子', `node ${n.id}`);
+      }
+      if (P.minHeap) {
+        cs.forEach(c => { if (c.key < n.key) bad('最小堆序被破坏', `父 ${n.key} 有更小的孩子 ${c.key}`); });
+      }
+      if (P.heightField) {
+        const lh = left[0] ? left[0].height : 0, rh = right[0] ? right[0].height : 0;
+        const real = 1 + Math.max(lh, rh);
+        if (n.height !== real) {
+          const lag = Math.abs((n.height || 0) - real);
+          if (lag > 1) bad('height 字段与结构严重脱节', `node ${n.id}: 记 ${n.height}，实为 ${real}`);
+          else if (!P.allowTransient) bad('height 字段与结构不符', `node ${n.id}: 记 ${n.height}，实为 ${real}`);
+        }
+        if (P.balanced != null && Math.abs(lh - rh) > P.balanced && !P.allowTransient) {
+          bad(`失衡 |bf|>${P.balanced}`, `node ${n.id}: bf=${lh - rh}`);
+        }
+      }
+    }
+
+    return { problems, info: { roots: realRoots.map(r => r.id), maxDepth, size: list.length } };
+  }
+
+  /* 帧间差异必须"一步能解释"：一次旋转最多动 4 个节点的父子关系 */
+  function diffFrames(prev, next, opts) {
+    const P = Object.assign({ maxChanges: 4 }, opts || {});
+    const a = new Map((prev || []).map(n => [n.id, n]));
+    const b = new Map((next || []).map(n => [n.id, n]));
+    const added = [...b.keys()].filter(k => !a.has(k));
+    const removed = [...a.keys()].filter(k => !b.has(k));
+    const reparented = [...b.keys()].filter(k => a.has(k) && a.get(k).parent !== b.get(k).parent);
+    const rekeyed = [...b.keys()].filter(k => a.has(k) && a.get(k).key !== b.get(k).key);
+    const problems = [];
+    if (added.length > 1) problems.push({ what: '一步新增了多个节点', detail: added.join(',') });
+    if (removed.length > 1) problems.push({ what: '一步删除了多个节点', detail: removed.join(',') });
+    const changes = added.length + removed.length + reparented.length + rekeyed.length;
+    if (changes > P.maxChanges) {
+      problems.push({ what: '一步内结构变化过多', detail: `+${added.length} -${removed.length} 换父${reparented.length} 换键${rekeyed.length}` });
+    }
+    return { problems, added, removed, reparented, rekeyed, changes };
+  }
+
+  /* 结算帧：算法一次操作真正完成的那一帧，必须完全合法 */
+  function checkSettled(nodes, opts) {
+    return inspect(nodes, Object.assign({}, opts, { allowTransient: false })).problems;
+  }
+
+  return { inspect, diffFrames, checkSettled, DEFAULT_POLICY };
+});

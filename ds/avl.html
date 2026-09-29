@@ -105,9 +105,10 @@
 </footer>
 
 <script src="../shared/stepper.js"></script>
+<script src="../shared/steps.js"></script>
+<script src="../shared/frames.js"></script>
 <script src="../shared/algo-ui.js"></script>
 <script src="../shared/treeview.js"></script>
-<script src="./avl.code.js"></script>
 <script src="./avl.js"></script>
 <script>
 /* =====================================================================
@@ -117,6 +118,7 @@
 (function () {
   'use strict';
   const AVL = window.AVLTree, Kit = window.AlgoKit;
+  const Steps = window.SlowMoSteps, Frames = window.SlowMoFrames;
   const el = id => document.getElementById(id);
 
   /* ---------------- 文案 ---------------- */
@@ -328,10 +330,16 @@
   }
   el('lang').onclick = () => { I18N.toggle(); relabel(); applyStep(stepper.index); };
 
-  /* ---------------- 自检：算法记录的行号必须都有效 ---------------- */
-  const audit = AVL.auditLogTargets('AVL');
-  if (audit.problems.length) console.error('AVL 行号自检失败', audit.problems);
-  else console.log('AVL 行号自检通过：' + audit.count + ' 个记录点');
+  /* 页面自检：算法暴露的结构不变量检查器。
+   * 行号/源码契约由 node tools/check.mjs 守（那是构建期的检查，不进页面）。 */
+  if (window.SlowMoFrames && window.SlowMoSteps) {
+    const bad = [];
+    steps.forEach((s, i) => {
+      bad.push(...Steps.checkSteps([s], 'scene#' + (i + 1)));
+      bad.push(...Frames.inspect(s.nodes, { maxChildren: 2, ordered: true, heightField: true, balanced: 1, allowTransient: true }).problems.map(p => p.what + ' ' + p.detail));
+    });
+    if (bad.length) console.error('AVL 页面自检失败：', bad.slice(0, 10));
+  }
 
   /* 调试/审阅出口：控制台可以看每一步的真实状态 */
   window.AVL_DEBUG = {

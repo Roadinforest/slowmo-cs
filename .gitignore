@@ -8,3 +8,6 @@ Thumbs.db
 # local scratch
 *.local.*
 _scratch/
+
+# 审阅产物（截图等），CI 会作为 artifact 上传
+artifacts/
