@@ -117,12 +117,18 @@
                     `叶子走到底，没有`, `reached the leaf, not there`);
           return null;
         }
-        const goRight = i >= n.keys.length || key > n.keys[i];
-        this._log(`下到第 ${i + 1} 个孩子（${goRight ? `因为 ${key} 比 ${n.keys[i - 1]} 大` : `因为 ${key} < ${n.keys[i]}`}）`,
-                  `Descend into child ${i + 1} (${goRight ? `${key} is greater than ${n.keys[i - 1]}` : `${key} < ${n.keys[i]}`})`,
-                  n.children[i] ? n.children[i].id : n.id,
+        /* i 是"第一个不小于 key 的分隔键"，命中判定用它；
+         * 但选孩子要用另一套下标：key 等于分隔键时，记录在右边那棵子树里
+         * （B+ 的分隔键就是右子树的最小键），所以要往右走一格。
+         * 两件事共用 i 会让"命中"和"下降"互相拆台 —— 之前就这么错过。 */
+        const hitSep = i < n.keys.length && key === n.keys[i];
+        const down = hitSep ? i + 1 : i;
+        const where = down >= n.keys.length ? `${key} 比所有分隔键都大` : (key > n.keys[down] ? `${key} 比 ${n.keys[down]} 大` : `${key} 不大于 ${n.keys[down]}`);
+        const whereEn = down >= n.keys.length ? `${key} is greater than every separator` : (key > n.keys[down] ? `${key} is greater than ${n.keys[down]}` : `${key} is not greater than ${n.keys[down]}`);
+        this._log(`下到第 ${down + 1} 个孩子（${where}）`, `Descend into child ${down + 1} (${whereEn})`,
+                  n.children[down] ? n.children[down].id : n.id,
                   `沿着分隔键下到孩子`, `follow the separators down`);
-        n = n.children[i];
+        n = n.children[down];
         depth++;
       }
       return null;
@@ -178,7 +184,13 @@
       return node;
     }
 
-    /* 往"还有空位"的节点里插。孩子满了先劈开它，再往下。 */
+    /* 往"还有空位"的节点里插。返回 {split:true,...} 表示这棵子树劈成了两半、要父节点接收。
+     *
+     * 两件事都要做，少一件都会在某个顺序下炸：
+     *   1. 下降时若孩子满了，先劈开它再往下 —— 这样"要插进去的那个节点"一定有位置；
+     *      当前节点因此多一个键，但它进门时非满（根已预先劈过），所以收得下。
+     *   2. 回溯时孩子若又劈了，把中间键和右半边收进来 —— 此时自己同样还有空位。
+     * 只做 1 会丢键（往下插时目标已满），只做 2 会遇到"孩子满 + 自己满"的死角。 */
     _insertNonFull(n, key, depth) {
       if (n.leaf) {
         const at = n.keys.findIndex(k => k > key);
@@ -191,45 +203,31 @@
       }
       let i = 0;
       while (i < n.keys.length && key > n.keys[i]) i++;
-      /* 相等时不能把孩子下标右移：B+ 树的分隔键等于右子树的最小键，
-       * 相等就该走 children[i]（那个键所在的那棵子树）。右移会整棵跳过，
-       * 于是"明明在树里的键"被走到错误的叶子里，报成没找到。 */
       const child = n.children[i];
-      if (child.keys.length < this.MAX) {
-        const sub = this._insertNonFull(child, key, depth + 1);
-        if (!sub || !sub.split) return null;
-        if (n.keys.length >= this.MAX) {
-          /* 提键之前先确认自己装得下：装不下就把自己劈开，让提键发生在新的一层 */
-          this._log(`孩子分裂完了，但这个节点也满了：先劈开它，再把 ${sub.midKey} 提上去`,
-                    `The child split, but this node is full too: split it first, then promote ${sub.midKey}`, n.id,
-                    `父节点也满，先劈它`, `the parent is full too, split it first`);
-          return this._split(n, depth);
-        }
-        n.keys.splice(i, 0, sub.midKey);
-        n.children.splice(i + 1, 0, sub.right);
-        this._log(`${sub.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
-                  `${sub.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
+      if (child.keys.length >= this.MAX) {
+        this._log(`第 ${i + 1} 个孩子已经满了（${child.keys.length} 个键）：先劈开它再往下`,
+                  `Child ${i + 1} is full (${child.keys.length} keys): split it before descending`, child.id,
+                  `下降前先劈开满孩子`, `split the full child before descending`);
+        const sp = this._split(child, depth + 1);
+        n.keys.splice(i, 0, sp.midKey);
+        n.children.splice(i + 1, 0, sp.right);
+        this._log(`${sp.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
+                  `${sp.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
                   `中间键提上来`, `the middle key moves up`);
-        return null;
+        if (key > sp.midKey) i++;
       }
-      /* 孩子满了：先劈开它，再决定往哪半边下 */
-      this._log(`第 ${i + 1} 个孩子已经满了（${child.keys.length} 个键）：先劈开它再往下`,
-                `Child ${i + 1} is full (${child.keys.length} keys): split it before descending`, child.id,
-                `下降前先劈开满孩子`, `split the full child before descending`);
+      const sub = this._insertNonFull(n.children[i], key, depth + 1);
+      if (!sub || !sub.split) return null;
+      /* 孩子在中途又劈了：收下中间键与右半边。进门时非满、只被加过一个键，所以收得下。 */
       if (n.keys.length >= this.MAX) {
-        this._log(`这个节点自己也满了：先把这一层劈开`,
-                  `This node is full as well: split this level first`, n.id,
-                  `父节点也满，先劈它`, `the parent is full too, split it first`);
-        return this._split(n, depth);
+        throw new Error('收不下孩子的分裂：父节点本应还有空位');
       }
-      const sp = this._split(child, depth + 1);
-      n.keys.splice(i, 0, sp.midKey);
-      n.children.splice(i + 1, 0, sp.right);
-      this._log(`${sp.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
-                `${sp.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
+      n.keys.splice(i, 0, sub.midKey);
+      n.children.splice(i + 1, 0, sub.right);
+      this._log(`${sub.midKey} 提上来插到第 ${i + 1} 个位置：这个节点现在是 [${label(n)}]`,
+                `${sub.midKey} is promoted into position ${i + 1}: the node now reads [${label(n)}]`, n.id,
                 `中间键提上来`, `the middle key moves up`);
-      const at = key > sp.midKey ? i + 1 : i;
-      return this._insertNonFull(n.children[at], key, depth + 1);
+      return n.keys.length > this.MAX ? this._split(n, depth) : null;
     }
 
     /* 分裂：B 树把中间键上移；B+ 树的叶子是"复制"上去，分隔键留在叶子里。
