@@ -70,6 +70,21 @@ g.tn.inserted .tn-label{fill:var(--ok,#2f5d50)}
 g.tn.rotated .tn-box{stroke:var(--rot,#3f4d6b);stroke-width:1.5}
 g.tn.rotated .tn-label{fill:var(--rot,#3f4d6b)}
 
+/* 红黑树：颜色就是数据，所以要一眼看出来。
+ * 红节点用实心胭脂红填充；黑节点用墨色实心。焦点态另加环。 */
+g.tn.red .tn-box{fill:var(--rb-red,#8c2f39);stroke:var(--rb-red,#8c2f39)}
+g.tn.red .tn-label{fill:var(--paper,#fbf9f4)}
+g.tn.red .tn-sub{fill:var(--paper,#fbf9f4);opacity:.75}
+g.tn.black .tn-box{fill:#2b2a26;stroke:#2b2a26}
+g.tn.black .tn-label{fill:var(--paper,#fbf9f4)}
+g.tn.black .tn-sub{fill:var(--paper,#fbf9f4);opacity:.6}
+/* 焦点仍然要能压过颜色：加一圈外环 */
+g.tn.now .tn-box{stroke:var(--accent,#8c2f39);stroke-width:3;
+  filter:drop-shadow(0 0 0.5px var(--paper,#fbf9f4))}
+g.tn.now.red .tn-box{stroke:#d98b93}
+g.tn.now.black .tn-box{stroke:#a9a49a}
+g.tn.visit.red .tn-box,g.tn.visit.black .tn-box{stroke-dasharray:3 2}
+
 /* 失衡：细红描边 + 角标 */
 g.tn.unbalanced .tn-box{stroke:var(--danger,#8c2f39);stroke-width:1.5}
 g.tn.unbalanced .tn-label{fill:var(--danger,#8c2f39)}
@@ -97,3 +112,26 @@ g.tv-slot .tn-label{fill:var(--node-sub,#9a917f)}
 @media (prefers-reduced-motion: reduce){
   g.tn,.tv-edge,.tn-box{transition:none}
 }
+
+/* ---- 数组视图（堆、并查集这类既是树又是数组的结构） ---- */
+.tv-array{display:flex;flex-wrap:wrap;gap:0;align-items:stretch;
+  border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;width:max-content;max-width:100%}
+.tv-cell{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-width:48px;padding:6px 10px 7px;border-right:1px solid var(--rule-soft);
+  background:var(--paper);transition:background .25s,color .25s,opacity .25s,transform .3s;
+}
+.tv-cell:last-child{border-right:0}
+.tv-cell i{font:400 9.5px var(--sans);font-style:normal;letter-spacing:.1em;color:var(--faint)}
+.tv-cell b{font:600 16px var(--serif);color:var(--ink);line-height:1.25}
+.tv-cell.gone{opacity:0}
+/* 与树视图同步的状态 */
+.tv-cell.now{background:var(--accent);border-color:var(--accent)}
+.tv-cell.now i,.tv-cell.now b{color:var(--paper)}
+.tv-cell.now i{opacity:.7}
+.tv-cell.hot{background:var(--visit-fill)}
+.tv-cell.hot b{color:var(--accent)}
+.tv-cell.visit{background:var(--visit-fill)}
+.tv-cell.inserted{background:#e8efe9}
+.tv-cell.inserted b{color:var(--ok)}
+.tv-array-wrap{padding:14px 0 4px}

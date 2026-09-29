@@ -23,6 +23,7 @@
  *            sub    副标签，例如 h=2 · bf=+1
  *            badge  角标，例如 "BF +2"（失衡时）
  *            state  空格分隔的状态类：visit now inserted removed rotate unbalanced
+ *            color  'red' / 'black'（红黑树用；不传就是中性色）
  *            parent 父节点 key，null 表示根
  *   focus?: key|null     当前"看"的节点（与 state 里的类二选一或并用）
  *   note?:  string       画布角注（例如 "以 10 为轴左旋"）
@@ -282,7 +283,10 @@
         badge.setAttribute('y', -M.NODE_H / 2 - 6);
 
         g.setAttribute('transform', 'translate(' + p.x.toFixed(1) + ',' + p.y.toFixed(1) + ')');
-        const cls = 'tn' + (n.state ? ' ' + n.state : '') + (badgeTxt ? ' unbalanced' : '');
+        const cls = 'tn'
+          + (n.state ? ' ' + n.state : '')
+          + (badgeTxt ? ' unbalanced' : '')
+          + (n.color ? ' ' + n.color : '');
         if (g.getAttribute('class') !== cls) g.setAttribute('class', cls);
         g.setAttribute('data-active', curKeys.has(K(n.key)) ? '1' : '0');
       });
@@ -372,5 +376,74 @@
     };
   }
 
-  global.TreeView = { mount, nodeWidth, textWidth, metrics };
+  /* -------------------------------------------------------------------------
+   * 数组视图
+   *
+   * 堆、并查集这类结构同时有"树"和"数组"两种真实表示，两边要能互相指认。
+   * 用法：
+   *   const arr = TreeView.mountArray(容器, { emptyText:'（空）' });
+   *   arr.update([{ key:1, name:1 }, ...], { focus:1, marks:{ 2:'hot' } });
+   * 单元格按数组顺序排列，每格显示下标与值；marks 用来跟树视图同步高亮。
+   * ---------------------------------------------------------------------- */
+  function mountArray(container, opts) {
+    const o = opts || {};
+    let cur = [];
+    const empty = document.createElement('div');
+    empty.className = 'tv-empty';
+    empty.textContent = o.emptyText || '';
+    container.innerHTML = '';
+    const row = document.createElement('div');
+    row.className = 'tv-array';
+    container.appendChild(row);
+    if (o.emptyText) container.appendChild(empty);
+
+    const cells = new Map();      // name -> { el, idx, val }
+    function render(items, state) {
+      const st = state || {};
+      const wanted = new Set(items.map(it => String(it.name)));
+      /* 消失的格子：先淡出再删，和树视图一个规矩 */
+      [...cells.keys()].forEach(k => {
+        if (wanted.has(k)) return;
+        const c = cells.get(k);
+        c.el.classList.add('gone');
+        cells.delete(k);
+        setTimeout(() => c.el.remove(), 260);
+      });
+      items.forEach((it, i) => {
+        const name = String(it.name);
+        let c = cells.get(name);
+        if (!c) {
+          const el = document.createElement('div');
+          el.className = 'tv-cell';
+          const idx = document.createElement('i');
+          const val = document.createElement('b');
+          el.append(idx, val);
+          row.appendChild(el);
+          c = { el, idx, val };
+          cells.set(name, c);
+          el.style.opacity = '0';
+          void el.getBoundingClientRect();
+          el.style.opacity = '';
+        }
+        c.idx.textContent = i;
+        c.val.textContent = String(it.key);
+        const mark = st.marks && st.marks[name];
+        const cls = 'tv-cell'
+          + (st.focus != null && String(st.focus) === name ? ' now' : '')
+          + (mark ? ' ' + mark : '');
+        if (c.el.className !== cls) c.el.className = cls;
+        /* 数组顺序变化时靠 flex order 平滑移动，而不是重建 DOM */
+        c.el.style.order = String(i);
+      });
+      if (o.emptyText) empty.style.display = items.length ? 'none' : '';
+      cur = items;
+    }
+    return {
+      update(items, state) { render(items || [], state); },
+      get length() { return cur.length; },
+      get cellCount() { return cells.size; }
+    };
+  }
+
+  global.TreeView = { mount, mountArray, nodeWidth, textWidth, metrics };
 })(window);

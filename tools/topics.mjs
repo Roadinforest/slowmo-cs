@@ -9,6 +9,7 @@
  */
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import fs from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -16,6 +17,8 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 export const TOPICS = [
   {
     id: 'avl',
+    /* 页面暴露的调试口：审阅工具用它逐帧对照 DOM 与算法状态 */
+    debug: 'AVL_DEBUG',
     name: { zh: 'AVL 树', en: 'AVL tree' },
     page: 'ds/avl.html',
     /* 算法实现。行号由运行时从调用栈取，不再需要源码解析器。 */
@@ -32,6 +35,38 @@ export const TOPICS = [
     members: ['rotateRight', 'rotateLeft', 'rebalance', 'insert', 'find', 'remove'],
     /* 结构特有策略：AVL 是严格平衡的 BST，节点自带 height */
     policy: { maxChildren: 2, ordered: true, heightField: true, balanced: 1 }
+  },
+
+  {
+    id: 'rbt',
+    name: { zh: '红黑树', en: 'Red-black tree' },
+    page: 'ds/rbt.html',
+    debug: 'RBT_DEBUG',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/rbt.js')) }),
+    sourceFile: 'ds/rbt.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '依次插入 20 10 30 5 15 25 35 1', run: () => algo.ops.insert() },
+      { key: 'search', zh: '查找 8', run: () => algo.ops.search() },
+      { key: 'delete', zh: '删除 3（触发双黑修复）', run: () => algo.ops.delete() }
+    ],
+    /* 红黑树：有序二叉 + 根黑 / 无红红 / 黑高相等。它不维护高度字段，也不要求 |bf|<=1 */
+    policy: { maxChildren: 2, ordered: true, redBlack: true }
+  },
+
+  {
+    id: 'heap',
+    name: { zh: '堆 / 优先队列', en: 'Heap / priority queue' },
+    page: 'ds/heap.html',
+    debug: 'HEAP_DEBUG',
+    load: () => ({ algo: require(path.join(ROOT, 'ds/heap.js')) }),
+    sourceFile: 'ds/heap.js',
+    scenarios: (algo) => [
+      { key: 'insert', zh: '依次插入 5 3 8 1 9 2', run: () => algo.ops.insert() },
+      { key: 'peek', zh: '读最小值', run: () => algo.ops.peek() },
+      { key: 'pop', zh: '删除最小值', run: () => algo.ops.pop() }
+    ],
+    /* 堆只保证"父不大于孩子"，左右之间没有顺序；也没有 height 字段 */
+    policy: { maxChildren: 2, ordered: false, minHeap: true }
   },
 
   /* --------------------------------------------------------------------

@@ -47,9 +47,9 @@ const BUTTON_AUDIT = `(() => {
   return { total: document.querySelectorAll('button').length, native: out };
 })()`;
 
-/* 算法驱动页的逐帧 DOM 对照 */
-const frameParity = (frames) => `(() => {
-  const D = window[${JSON.stringify('AVL_DEBUG')}];
+/* 算法驱动页的逐帧 DOM 对照。页面通过 topic.debug 暴露调试口。 */
+const frameParity = (debugName) => `(() => {
+  const D = window[${JSON.stringify(debugName)}];
   if (!D) return { skipped: true };
   const tabs = [...document.querySelectorAll('.optab')];
   const out = [];
@@ -122,12 +122,15 @@ async function main() {
     /* 2. 逐帧 DOM 对照（算法驱动页） */
     let parity = '—';
     if (page.topic) {
-      const r = await evaluate(frameParity());
+      if (!page.topic.debug) parity = '跳过（未登记调试口）';
+      else {
+      const r = await evaluate(frameParity(page.topic.debug));
       if (r.skipped) parity = '跳过（页面没暴露调试口）';
       else {
         const bad = r.scenes.flatMap(s => s.bad.map(b => `${s.name}#${b.frame} ${b.what} 轨迹=${b.trace} DOM=${b.dom}`));
         bad.forEach(b => fail(page.id, '逐帧 DOM 不一致', b));
         parity = r.scenes.map(s => `${s.name} ${s.frames} 帧`).join(' / ') + (bad.length ? ` ✗ ${bad.length} 处` : ' ✓');
+      }
       }
     }
 

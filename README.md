@@ -34,9 +34,9 @@ Open **`index.html`**. That is the whole setup.
 | --- | --- | --- |
 | OS | [Five I/O Models](os/io-models.html) — blocking, non-blocking, multiplexing, signal-driven, async | ✅ playable |
 | Data structures | [Common tree structures](ds/trees.html) — N-ary, binary, BST, AVL, red-black, heap, B-tree, B+ tree | ✅ playable |
-| Data structures | [AVL tree](ds/avl.html) — the real algorithm, traced: insert, search, delete, rotations | ✅ playable |
-| Data structures | Red-black tree rotations (next to AVL) | planned |
-| Data structures | Heaps — sift-up / sift-down | planned |
+| Data structures | [AVL tree](ds/avl.html) — the real algorithm, traced: insert, search, delete, four rotations | ✅ playable |
+| Data structures | [Red-black tree](ds/rbt.html) — recolour, rotate, and the double-black repair of delete | ✅ playable |
+| Data structures | [Heap / priority queue](ds/heap.html) — sift-up and sift-down, array and tree in step | ✅ playable |
 | Data structures | Hash table collisions, load factor, rehashing | planned |
 | OS | Threads & context switch — registers, stack pointer, PCB | planned |
 | OS | CPU scheduling — FCFS, SJF, RR, MLFQ with a live Gantt chart | planned |
@@ -56,16 +56,18 @@ slowmo-cs/
 │   ├── io-models.html      # one topic: rendering + wiring
 │   └── io-models.data.js   # one topic: content and steps
 ├── ds/
-│   ├── avl.html            # one topic: main() only — registers ops, binds the trace
-│   ├── avl.js              # the real AVL algorithm + its trace recorder
-│   ├── trees.html          # the older, hand-drawn tree tour
+│   ├── avl.html / avl.js       # one topic: main() only + the real algorithm
+│   ├── rbt.html / rbt.js       # red-black tree, double-black repair included
+│   ├── heap.html / heap.js     # min-heap, array view and tree view in step
+│   ├── trees.html              # the older, hand-drawn tree tour
 │   └── trees.data.js
 ├── shared/
 │   ├── classic.css         # the whole design system (tokens + every component)
 │   ├── stepper.js          # the step engine
+│   ├── trace.js            # the recorder: line numbers, snapshots, narration
 │   ├── steps.js            # the step contract (shape of one frame)
-│   ├── frames.js           # structural invariants (one root, no cycles, ordered...)
-│   ├── treeview.js         # algorithm state -> persistent DOM binding
+│   ├── frames.js           # structural invariants (one root, no cycles, heap/RB rules)
+│   ├── treeview.js         # algorithm state -> persistent DOM binding (+ array view)
 │   ├── treeview.css        # the tree's states (colors come from classic.css)
 │   └── algo-ui.js          # step chips, tables
 └── tools/
@@ -83,17 +85,26 @@ keyboard. `classic.css` only handles *looks*. `treeview.js` only handles
 **Hand-drawn** (`os/io-models.html`, `ds/trees.html`) — you author a `steps`
 array of snapshots and write a `draw(step)`.
 
-**Algorithm-driven** (`ds/avl.html`) — you write the algorithm, it records its
-own trace, and the page is just a `main`:
+**Algorithm-driven** (`ds/avl.html`, `ds/rbt.html`, `ds/heap.html`) — you write the
+algorithm as a subclass of `Trace` (`shared/trace.js`), it records its own run, and
+the page is just a `main`:
 
 ```js
-const rec = AVL.ops.insert([50, 30, 70, 20, 40, 45]);   // real run, real snapshots
-steps = rec.entries;                                     // [{text, act, focus, nodes}]
-TreeView.mount(stage).update(viewStateFor(steps[i]));     // persistent DOM binding
+class MyTree extends Trace {
+  root() { return this._root }
+  kids(n) { return [n.left, n.right] }
+  settle() { /* 拍快照前把派生字段算对 */ }
+  extras(n) { /* 结构特有的展示字段，比如颜色 */ }
+  insert(key) {
+    this._log('比较…', 'Compare…', node.id, '比较后决定往哪边走', 'compare, then pick a side');
+  }
+}
 ```
 
-The tree on screen is the algorithm's own structural snapshot — node identity is
-a stable `id`, `key` is just data it carries. Nothing is drawn by hand.
+`_log` records one frame: where it was emitted (taken from the call stack, so there is
+no constant to drift), a bilingual narration, an optional one-line summary, the node
+being looked at, and a structural snapshot. Nothing is drawn by hand, and node identity
+is a stable `id` — `key` is just data the node carries.
 
 ## Adding a topic
 
@@ -137,6 +148,11 @@ node tools/review.mjs     # 浏览器侧：运行时错误、逐帧 DOM 对照�
 - **line numbers taken from the call stack** — a frame records where it was
   emitted via `Error.captureStackTrace(err, this._log)`, so there is no
   hand-maintained constant to drift when the algorithm is edited
+- **structure-specific rules** — ordered children (BST/AVL/RB), heap order,
+  red-black properties (black root, no red-red, equal black height), height
+  fields, bounded balance. Rules that an algorithm breaks *on purpose* mid-fix
+  (an unbalanced subtree, a temporarily red root, a heap order awaiting a swap)
+  are allowed in mid-operation frames but forbidden in the frame that settles it
 - **structural invariants** (`shared/frames.js`) — one root, no cycles, parent
   pointers reachable, children ordered, height fields consistent, balance within
   bounds. Frames that settle an operation must satisfy all of them; frames in the

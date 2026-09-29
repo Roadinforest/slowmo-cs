@@ -28,7 +28,10 @@
     minHeap: false,
     heightField: false,
     balanced: null,
-    allowTransient: false
+    allowTransient: false,
+    /* 红黑性质：根为黑、无红红相连、每条根到空叶路径黑高相同。
+     * 需要节点带 color 字段（'red' / 'black'）。 */
+    redBlack: false
   };
 
   /* 返回 { problems: [{what, detail}], info: {roots, maxDepth, size} } */
@@ -83,6 +86,44 @@
       (kids.get(id) || []).forEach(c => walk(c.id, d + 1));
     })(realRoots[0] ? realRoots[0].id : (roots[0] || {}).id, 0);
 
+    /* --- 红黑性质 ---
+     * 插入/删除的修复过程中，"根变红""红红相连""黑高暂时不等"都是算法
+     * 正在处理的中间状态（修复的最后一步会消掉）。所以它们在瞬态帧里是正常的，
+     * 只有结算帧才必须全部成立 —— 跟 AVL 的"发现失衡但还没转"同理。 */
+    if (P.redBlack) {
+      const isRed = n => !!n && n.color === 'red';
+      const isBlack = n => !n || n.color === 'black';
+      const rbBad = (what, detail) => { if (!P.allowTransient) bad(what, detail); };
+
+      if (realRoots[0] && isRed(realRoots[0])) rbBad('根不是黑色', `node ${realRoots[0].id}(key ${realRoots[0].key})`);
+      for (const n of list) {
+        /* 颜色字段本身非法（拼错、缺失）永远是问题，不算瞬态 */
+        if (n.color !== 'red' && n.color !== 'black') {
+          bad('节点颜色非法', `node ${n.id} color=${JSON.stringify(n.color)}`);
+          continue;
+        }
+        if (!isRed(n)) continue;
+        (kids.get(n.id) || []).forEach(c => {
+          if (isRed(c)) rbBad('红红相连', `${n.id}(${n.key}) 与孩子 ${c.id}(${c.key}) 都是红`);
+        });
+      }
+
+      /* 黑高：从根出发每条到空叶的路径，黑节点数必须相同 */
+      (function blackHeight(id, depth, acc) {
+        const n = byId.get(id);
+        if (!n) return;
+        const next = acc + (isBlack(n) ? 1 : 0);
+        const cs = kids.get(id) || [];
+        if (!cs.length) {
+          if (depth === 0) return;
+          if (P._bh == null) P._bh = next;
+          else if (P._bh !== next) rbBad('黑高不等', `路径到 node ${id} 有 ${next} 个黑节点，别的路径是 ${P._bh}`);
+          return;
+        }
+        cs.forEach(c => blackHeight(c.id, depth + 1, next));
+      })(realRoots[0] ? realRoots[0].id : null, 0, 0);
+    }
+
     for (const n of list) {
       const cs = kids.get(n.id) || [];
       if (P.maxChildren != null && cs.length > P.maxChildren) {
@@ -97,7 +138,9 @@
         }
         if (left.length > 1 || right.length > 1) bad('同侧多个孩子', `node ${n.id}`);
       }
-      if (P.minHeap) {
+      /* 上浮/下沉途中的中间帧必然违反堆序（正在交换的路上），
+       * 只有结算帧才必须成立 —— 和红黑树的瞬态豁免同一个道理。 */
+      if (P.minHeap && !P.allowTransient) {
         cs.forEach(c => { if (c.key < n.key) bad('最小堆序被破坏', `父 ${n.key} 有更小的孩子 ${c.key}`); });
       }
       if (P.heightField) {
@@ -119,7 +162,8 @@
 
   /* 帧间差异必须"一步能解释"：一次旋转最多动 4 个节点的父子关系 */
   function diffFrames(prev, next, opts) {
-    const P = Object.assign({ maxChanges: 4 }, opts || {});
+    /* 一次双旋最多动 4 个节点的父子关系；堆的一次下沉是"父 + 两个孩子"= 5 */
+    const P = Object.assign({ maxChanges: 5 }, opts || {});
     const a = new Map((prev || []).map(n => [n.id, n]));
     const b = new Map((next || []).map(n => [n.id, n]));
     const added = [...b.keys()].filter(k => !a.has(k));
